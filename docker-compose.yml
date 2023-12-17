@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  api:
+    build: ./services/api
+    volumes:
+      - ./services/api:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    ports:
+      - "3000:3000"
+
+  frontend:
+    build: ./services/frontend
+    volumes:
+      - ./services/frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    environment:
+      - NODE_ENV=production
+      - CHOKIDAR_USEPOLLING=true # This ensures compatibility for hot-reloading on all systems
+    ports:
+      - "8000:8000"
