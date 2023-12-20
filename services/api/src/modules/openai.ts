@@ -4,9 +4,6 @@ import { Chunk } from "./scraper";
 import { OpenAI } from "openai";
 import { Stream } from "openai/streaming";
 
-//const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-//const OPENAI_API_URL = "https://api.openai.com/v1";
-
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
 
@@ -19,47 +16,6 @@ export interface RAGResponse {
 const openai = new OpenAI({
   apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
 });
-
-/*
-const openAIApi: AxiosInstance = axios.create({
-  baseURL: OPENAI_API_URL,
-  headers: {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${OPENAI_API_KEY}`,
-  },
-  timeout: 60000,
-});
-*/
-
-/*
-const use_chat_completions_openai_api_endpoint = async (
-  gptModelVersion: string,
-  messages: { role: string; content: string }[],
-  maxTokens: number = MAX_TOKENS,
-  temperature: number = TEMPERATURE,
-  stream: boolean = false
-): Promise<any> => {
-  const axiosRequestConfig: AxiosRequestConfig = stream
-    ? { responseType: "stream" }
-    : {};
-  try {
-    const response = await openAIApi.post(
-      "/chat/completions",
-      {
-        model: gptModelVersion,
-        messages,
-        max_tokens: maxTokens,
-        temperature,
-        stream,
-      },
-      axiosRequestConfig
-    );
-    return response.data;
-  } catch (error: any) {
-    throw new Error(error.message);
-  }
-};
-*/
 
 export const askGPT = async (
   gptModelVersion: string,
