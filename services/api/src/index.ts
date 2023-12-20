@@ -8,7 +8,7 @@ import {
   identifyLikeliesCompanyFonectaFinderUrl,
 } from "./modules/scraper";
 import { makeVectorStore } from "./modules/store";
-import { askGPTWithRAG } from "./modules/openai";
+import { askGPTWithRAG, askGPT } from "./modules/openai";
 import { FaissStore } from "langchain/vectorstores/faiss";
 
 dotenv.config();
@@ -58,9 +58,10 @@ const extractJSONFromString = (text: string): any => {
   return null;
 };
 
-app.post("/company/summary", async (req, res) => {
+app.post("/company/details", async (req, res) => {
   const companyName = req.query.companyName as string;
   const gptModelVersion = req.query.gptModelVersion as string;
+  const language = req.query.language as string;
 
   console.log(`Using GPT model version: ${gptModelVersion}`);
 
@@ -145,11 +146,71 @@ app.post("/company/summary", async (req, res) => {
   });
 });
 
+app.post("/sales/email", async (req, res) => {
+  const gptModelVersion = req.query.gptModelVersion as string;
+  const companySummary = req.query.companySummary as string;
+  const salesOffering = req.query.salesOffering as string;
+  const language = req.query.language as string;
+
+  const senderCompany = "Veracell";
+  const recipientCompany = "GetUp Consulting";
+  const recipientName = "Sami Martikainen";
+
+  const prompt = `
+Task:
+Your role is a salesperson doing sales outreach to cold contacts (prospects). Write an email with the following contents:
+- Introduction of your company
+- What are the biggest bottlenecks in the industry of the prospect
+- How the vendor can help with the sales offering to help the prospect
+- Finally, propose a meeting. Provide a calendly link for booking the meeting
+
+Company that is sending the email:
+${senderCompany}
+
+Sales offering of Veracell:
+${salesOffering}
+
+Name of the recipient:
+${recipientName}
+
+Name of the recipient company:
+${recipientCompany}
+
+Business summary of the recipient company:
+${companySummary}
+
+Write the email in language:
+${language}
+
+Example output (replace values inside curly braces):
+Hi {RecipientFirstName},
+
+We're Veracell, AI consultancy. As you are operating in boosting the sales of your customers, perhaps you've aware how AI is disrupting the field at a rapid pace. Our company is helping customers like you to empower their sales teams with AI to beat the competition. We have been developing AI assistants that leverage large language models to improve and automate processes in customer sales operations.
+
+Are you interested meeting our AI expert Timo Erkkilä? If so, book a meeting here:
+https://calendly.com/veracell/timo-erkkila/30min
+
+
+Kind regards,
+John Doe
+Veracell
+  `;
+
+  console.log(prompt);
+
+  const response = await askGPT(gptModelVersion, prompt);
+
+  console.log("Response email:\n\n", response);
+
+  res.send({ email: response });
+});
+
 app.post("/company/ask", async (req, res) => {
   if (VECTOR_STORE === undefined) return;
 
   const gptModelVersion = req.query.gptModelVersion as string;
   const question = req.query.question as string;
+  const language = req.query.language as string;
 
   console.log(`Using GPT model version: ${gptModelVersion}`);
 

@@ -9,7 +9,7 @@ interface GoogleSearchResultItem {
   snippet: string;
 }
 
-export const getGoogleSearchResults = async (
+export const askGoogle = async (
   query: string
 ): Promise<GoogleSearchResultItem[]> => {
   const urlWithQuery = `https://www.googleapis.com/customsearch/v1?key=${API_KEY}&cx=${CSE_ID}&q=${encodeURIComponent(

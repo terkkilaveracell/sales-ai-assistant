@@ -1,11 +1,14 @@
-import axios, { AxiosInstance } from "axios";
+import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
 import { FaissStore } from "langchain/vectorstores/faiss";
 import { Chunk } from "./scraper";
+import { OpenAI } from "openai";
+import { Stream } from "openai/streaming";
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_API_URL = "https://api.openai.com/v1";
+//const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+//const OPENAI_API_URL = "https://api.openai.com/v1";
 
-//const OPENAI_GPT_MODEL = "gpt-3.5-turbo";
+const MAX_TOKENS = 500;
+const TEMPERATURE = 0.7;
 
 export interface RAGResponse {
   prompt: string;
@@ -13,44 +16,81 @@ export interface RAGResponse {
   chunks: Chunk[];
 }
 
+const openai = new OpenAI({
+  apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
+});
+
+/*
 const openAIApi: AxiosInstance = axios.create({
   baseURL: OPENAI_API_URL,
   headers: {
     "Content-Type": "application/json",
     Authorization: `Bearer ${OPENAI_API_KEY}`,
   },
-  timeout: 30000,
+  timeout: 60000,
 });
+*/
 
+/*
 const use_chat_completions_openai_api_endpoint = async (
   gptModelVersion: string,
   messages: { role: string; content: string }[],
-  maxTokens: number = 500,
-  temperature: number = 0.7
+  maxTokens: number = MAX_TOKENS,
+  temperature: number = TEMPERATURE,
+  stream: boolean = false
 ): Promise<any> => {
+  const axiosRequestConfig: AxiosRequestConfig = stream
+    ? { responseType: "stream" }
+    : {};
   try {
-    const response = await openAIApi.post("/chat/completions", {
-      model: gptModelVersion,
-      messages,
-      max_tokens: maxTokens,
-      temperature,
-    });
+    const response = await openAIApi.post(
+      "/chat/completions",
+      {
+        model: gptModelVersion,
+        messages,
+        max_tokens: maxTokens,
+        temperature,
+        stream,
+      },
+      axiosRequestConfig
+    );
     return response.data;
   } catch (error: any) {
     throw new Error(error.message);
   }
 };
+*/
 
 export const askGPT = async (
   gptModelVersion: string,
-  question: string
+  question: string,
+  maxTokens: number = MAX_TOKENS,
+  temperature: number = TEMPERATURE
 ): Promise<string> => {
-  const messages = [{ role: "user", content: question }];
-  const response = await use_chat_completions_openai_api_endpoint(
-    gptModelVersion,
-    messages
-  );
-  return response.choices[0].message.content;
+  const response = await openai.chat.completions.create({
+    messages: [{ role: "user", content: question }],
+    model: gptModelVersion,
+    max_tokens: maxTokens,
+    temperature: temperature,
+    stream: false,
+  });
+  return response.choices[0].message.content || "";
+};
+
+export const askGPTStream = async (
+  gptModelVersion: string,
+  question: string,
+  maxTokens: number = MAX_TOKENS,
+  temperature: number = TEMPERATURE
+): Promise<Stream<OpenAI.Chat.Completions.ChatCompletionChunk>> => {
+  const response = await openai.chat.completions.create({
+    messages: [{ role: "user", content: question }],
+    model: gptModelVersion,
+    max_tokens: maxTokens,
+    temperature: temperature,
+    stream: true,
+  });
+  return response;
 };
 
 export const askGPTWithRAG = async (
@@ -111,7 +151,16 @@ ${hits
 
   console.log(prompt);
 
-  const answer = await askGPT(gptModelVersion, prompt);
+  const answer = await askGPT(gptModelVersion, prompt, MAX_TOKENS, TEMPERATURE);
 
-  return { prompt, answer, chunks: [] };
+  const chunks = hits.map(
+    ([hit, distance]) =>
+      ({
+        url: hit.metadata.url,
+        index: hit.metadata.id,
+        text: hit.pageContent,
+      } as Chunk)
+  );
+
+  return { prompt, answer, chunks };
 };

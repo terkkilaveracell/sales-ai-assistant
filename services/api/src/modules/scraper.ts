@@ -4,7 +4,7 @@ import robotsParser, { Robot } from "robots-parser";
 import { CheerioWebBaseLoader } from "langchain/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { HtmlToTextTransformer } from "langchain/document_transformers/html_to_text";
-import { getGoogleSearchResults } from "./google";
+import { askGoogle } from "./google";
 
 export interface Chunk {
   url: string;
@@ -49,7 +49,7 @@ const getBaseUrl = (url: string): string => {
 export const identifyLikeliesCompanyUrl = async (
   companyName: string
 ): Promise<string> => {
-  const searchResults = await getGoogleSearchResults(companyName);
+  const searchResults = await askGoogle(companyName);
 
   const companyWebsiteCandidates = searchResults
     .map((el) => ({ url: el.link, snippet: el.snippet }))
@@ -65,7 +65,7 @@ export const identifyLikeliesCompanyUrl = async (
 export const identifyLikeliesCompanyFonectaFinderUrl = async (
   companyName: string
 ): Promise<string> => {
-  const searchResults = await getGoogleSearchResults(`${companyName} finder`);
+  const searchResults = await askGoogle(`${companyName} finder`);
 
   const websiteCandidates = searchResults
     .map((el) => ({ url: el.link, snippet: el.snippet }))
