@@ -1,14 +1,17 @@
 import { useState } from "react";
 import { Group, AppShell } from "@mantine/core";
-import { IconHome } from "@tabler/icons-react";
+import { IconHome, IconBottle } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 
 import classes from "./AppNavbar.module.css";
 
-const data = [{ link: "", label: "Company details", icon: IconHome }];
+const data = [
+  { link: "", label: "Sales assistant", icon: IconHome },
+  { link: "", label: "Sandbox", icon: IconBottle },
+];
 
 export const AppNavbar = () => {
-  const [active, setActive] = useState("Billing");
+  const [active, setActive] = useState("Sales assistant");
 
   const [isNavbarOpened, { toggle: toggleNavbar }] = useDisclosure();
 

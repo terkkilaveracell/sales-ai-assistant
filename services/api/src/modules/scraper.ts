@@ -5,6 +5,11 @@ import { CheerioWebBaseLoader } from "langchain/document_loaders/web/cheerio";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { HtmlToTextTransformer } from "langchain/document_transformers/html_to_text";
 import { askGoogle } from "./google";
+import Bottleneck from "bottleneck";
+
+const limiter = new Bottleneck({
+  maxConcurrent: 5,
+});
 
 export interface Chunk {
   url: string;
@@ -76,16 +81,21 @@ export const identifyLikeliesCompanyFonectaFinderUrl = async (
   return websiteCandidates[0].url;
 };
 
-export const scrapeWebsite = async (url: string): Promise<Chunk[]> => {
+export const scrapeWebsite = async (
+  url: string,
+  chunkSize: number = 500,
+  chunkOverlap: number = 100
+): Promise<Chunk[]> => {
   const loader = new CheerioWebBaseLoader(url);
 
   const docs = await loader.load();
 
-  const splitter = RecursiveCharacterTextSplitter.fromLanguage("html", {
-    chunkSize: 500,
-    chunkOverlap: 100,
-  });
   const transformer = new HtmlToTextTransformer();
+
+  const splitter = RecursiveCharacterTextSplitter.fromLanguage("html", {
+    chunkSize: chunkSize,
+    chunkOverlap: chunkOverlap,
+  });
 
   const sequence = splitter.pipe(transformer);
 
@@ -99,27 +109,6 @@ export const scrapeWebsite = async (url: string): Promise<Chunk[]> => {
         text: doc.pageContent,
       } as Chunk)
   );
-};
-
-const convertXmlToJson = async (xml: string): Promise<any> => {
-  return new Promise((resolve, reject) => {
-    parseString(
-      xml,
-      {
-        explicitArray: false,
-        trim: true,
-        normalize: true,
-        normalizeTags: true,
-      },
-      (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      }
-    );
-  });
 };
 
 const getRobot = async (url: string): Promise<Robot> => {
@@ -136,17 +125,47 @@ const getRobot = async (url: string): Promise<Robot> => {
   return robot;
 };
 
+async function fetchAndParseSitemap(url: string): Promise<string[]> {
+  try {
+    const response = await axios.get(url);
+    return new Promise((resolve, reject) => {
+      parseString(response.data, (err, result) => {
+        if (err) {
+          reject(err);
+        } else {
+          if (result.sitemapindex) {
+            // It's a sitemap index
+            const sitemaps = result.sitemapindex.sitemap.map(
+              (s: any) => s.loc as string
+            );
+            resolve(processSitemapIndex(sitemaps));
+          } else {
+            // It's a regular sitemap
+            const urls = result.urlset.url.map(
+              (urlEntry: any) => urlEntry.loc as string
+            );
+            resolve(urls);
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error("Error fetching the sitemap:", error);
+    return [];
+  }
+}
+
+async function processSitemapIndex(sitemapUrls: string[]): Promise<string[]> {
+  const allUrls: string[] = [];
+  for (const sitemapUrl of sitemapUrls) {
+    const urls = await fetchAndParseSitemap(sitemapUrl);
+    allUrls.push(...urls);
+  }
+  return allUrls;
+}
+
 const getSitemapUrls = async (sitemapUrl: string): Promise<string[]> => {
-  console.log(`Fetching sitemap URLs from: ${sitemapUrl}`);
-
-  const response = await axios.get(sitemapUrl, { responseType: "text" });
-
-  const sitemapXmlStr = response.data;
-
-  const sitemap = await convertXmlToJson(sitemapXmlStr);
-
-  const foo = sitemap.urlset.url as any[];
-  const sitemapUrls = foo.map((el: any) => el.loc) as string[];
+  const sitemapUrls = await fetchAndParseSitemap(sitemapUrl);
 
   return sitemapUrls;
 };
@@ -170,7 +189,9 @@ export const scrapeWebsiteBySitemap = async (
 
   const scrapedContent = (
     await Promise.all(
-      [baseUrl, ...sitemapUrls].map(async (url) => await scrapeWebsite(url))
+      [baseUrl, ...sitemapUrls].map((url) =>
+        limiter.schedule(() => scrapeWebsite(url))
+      )
     )
   ).reduce((accumulator, value) => accumulator.concat(value), []);
 

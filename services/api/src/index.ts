@@ -6,15 +6,16 @@ import {
   scrapeWebsite,
   scrapeWebsiteBySitemap,
   identifyLikeliesCompanyFonectaFinderUrl,
+  Chunk,
 } from "./modules/scraper";
 import { makeVectorStore } from "./modules/store";
 import { askGPTWithRAG, askGPT } from "./modules/openai";
 import { FaissStore } from "langchain/vectorstores/faiss";
+import { askGoogle } from "./modules/google";
 
 dotenv.config();
 
 const app = express();
-const port = 3000;
 
 // Enable CORS for frontend service
 app.use(
@@ -78,7 +79,49 @@ app.post("/company/details", async (req, res) => {
     `For company name "${companyName}", likeliest company Finder URL is: ${companyFinderUrl}`
   );
 
-  const scrapedCompanyWebsiteContent = await scrapeWebsiteBySitemap(companyUrl);
+  const hits = await askGoogle(`${companyName} contact`);
+
+  console.log(hits);
+
+  const prompt2 = `
+Given the following list of URLs, which are the likely ones to contain contact details for the decision-makers of the company?
+
+URLs:
+${hits.map((hit) => `\n- ${hit.link}`)}
+
+  `;
+
+  console.log(prompt2);
+
+  const foo = await askGPT(gptModelVersion, prompt2);
+
+  console.log(foo);
+
+  const chunkSize = 1000;
+  const chunkOverlap = 0;
+
+  const contents = reduceChunks(
+    await Promise.all(
+      hits.map(async (hit) =>
+        reduceChunks(await scrapeWebsite(hit.link, chunkSize, chunkOverlap))
+      )
+    )
+  );
+
+  const prompt = `
+Find all the names from the provided text. The names should contain first name and last name. Provide the names in a list.
+
+Example output:
+['John Doe', 'Mark Hamill', 'John Wayne']
+
+Text:
+${contents.text}
+
+  `;
+
+  //console.log(prompt);
+
+  const scrapedCompanyWebsiteContent = await scrapeWebsite(companyUrl);
   const scrapedCompanyFinderContent = await scrapeWebsite(companyFinderUrl);
 
   const scrapedContent = [
@@ -144,6 +187,52 @@ app.post("/company/details", async (req, res) => {
       contactDetails: [ceoContactDetails],
     },
   });
+});
+
+const reduceChunks = (chunks: Chunk[]) => {
+  return chunks.reduce(
+    (prev, curr) =>
+      ({
+        url: prev.url,
+        index: 0,
+        text: prev.text + curr.text,
+      } as Chunk)
+  );
+};
+
+app.post("/company/contacts", async (req, res) => {
+  const companyName = req.query.companyName as string;
+  const gptModelVersion = req.query.gptModelVersion as string;
+
+  const hits = (await askGoogle(`${companyName} contact`)).slice(0, 3);
+
+  const chunkSize = 1000;
+  const chunkOverlap = 0;
+
+  const contents = reduceChunks(
+    await Promise.all(
+      hits.map(async (hit) =>
+        reduceChunks(await scrapeWebsite(hit.link, chunkSize, chunkOverlap))
+      )
+    )
+  );
+
+  const prompt = `
+Find all the names from the provided text. The names should contain first name and last name. Provide the names in a list.
+
+Example output:
+['John Doe', 'Mark Hamill', 'John Wayne']
+
+Text:
+${contents.text}
+
+  `;
+
+  console.log(prompt);
+
+  //const contacts = await askGPT(gptModelVersion, prompt);
+
+  res.send({ hits, prompt });
 });
 
 app.post("/sales/email", async (req, res) => {
@@ -224,6 +313,8 @@ app.post("/company/ask", async (req, res) => {
     response: ragResponse,
   });
 });
+
+const port = 3000;
 
 app.listen(port, () => {
   console.log(`API server listening at http://localhost:${port}`);
