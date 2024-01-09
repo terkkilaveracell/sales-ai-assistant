@@ -23,6 +23,7 @@ export const askGPT = async (
   maxTokens: number = MAX_TOKENS,
   temperature: number = TEMPERATURE
 ): Promise<string> => {
+  console.log(`Asking GPT:\n\n${question}`);
   const response = await openai.chat.completions.create({
     messages: [{ role: "user", content: question }],
     model: gptModelVersion,
@@ -83,11 +84,11 @@ ${example}
 
   const prompt = `
 
-Question:
+Query:
 ${query}
 
 General instructions:
-Use the following reference material, scraped from a website, to answer the privided question. 
+Use the following reference material, scraped from a website, to answer the provided query.
 The reference material is split into chunks, and can originate from different websites. Each chunk is assocated with euclidean distance score.
 Use the score as a guideline when weighing the relevance of each chunk in forming the response. Smaller euclidean distance means higher similarity.
 

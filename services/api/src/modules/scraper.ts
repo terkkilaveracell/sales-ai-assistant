@@ -62,6 +62,7 @@ export const identifyLikeliesCompanyUrl = async (
     .map((el) => ({ url: getBaseUrl(el.url), snippet: el.snippet }))
     .filter((el) => endsWithAny(el.url, [".fi", ".com"]));
 
+  console.log(searchResults.map((hit) => hit.link));
   console.log(companyWebsiteCandidates);
 
   return companyWebsiteCandidates[0].url;
@@ -111,8 +112,15 @@ export const scrapeWebsite = async (
   );
 };
 
+function ensureHttps(url: string): string {
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = "https://" + url;
+  }
+  return url;
+}
+
 const getRobot = async (url: string): Promise<Robot> => {
-  const robotsUrl = new URL("robots.txt", url).href;
+  const robotsUrl = new URL("robots.txt", ensureHttps(url)).href;
 
   console.log(`Guessing robot file location: ${robotsUrl}`);
 

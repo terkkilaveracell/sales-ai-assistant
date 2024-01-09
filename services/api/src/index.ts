@@ -12,6 +12,11 @@ import { makeVectorStore } from "./modules/store";
 import { askGPTWithRAG, askGPT } from "./modules/openai";
 import { FaissStore } from "langchain/vectorstores/faiss";
 import { askGoogle } from "./modules/google";
+import {
+  promptToFindCompanyWebsiteUrlFromChunks,
+  promptToFindPeopleNamesFromChunks,
+  promptToSearchContactDetailsUrls,
+} from "./modules/prompts";
 
 dotenv.config();
 
@@ -318,4 +323,244 @@ const port = 3000;
 
 app.listen(port, () => {
   console.log(`API server listening at http://localhost:${port}`);
+});
+
+app.post("/sandbox/google-search", async (req, res) => {
+  const gptModelVersion = req.query.gptModelVersion as string;
+  const googleSearchString = req.query.googleSearchString as string;
+  const language = req.query.language as string;
+
+  const googleSearchResults = await askGoogle(googleSearchString);
+
+  res.send({ googleSearchResults });
+});
+
+interface PromptProps {
+  instruction: string;
+  exampleOutput: string[];
+  backgroundInformation: string;
+}
+
+const makePrompt = (props: PromptProps) => {
+  return `
+Instruction:
+${props.instruction}
+
+Example output:
+${props.exampleOutput}
+
+Background information:
+${props.backgroundInformation}
+
+  `;
+};
+
+const extractListOfStrings = (jsonString: string): string[] => {
+  try {
+    const result = JSON.parse(jsonString);
+    // Validate if the result is an array of strings
+    if (
+      Array.isArray(result) &&
+      result.every((item) => typeof item === "string")
+    ) {
+      return result;
+    } else {
+      throw new Error("Parsed data is not an array of strings");
+    }
+  } catch (error) {
+    console.error("Error parsing JSON string:", error);
+    return [];
+  }
+};
+
+//const extractJSONFromString = (responseString: string): string | null {
+//  // This regex looks for anything between ```json and ```
+//  const jsonMatch = responseString.match(/```json([^`]*)```/);
+//  return jsonMatch ? jsonMatch[1].trim() : null; // Trim to remove any whitespace around the JSON
+//}
+
+const makeContactSearchRegExp = (
+  firstName: string,
+  lastName: string
+): RegExp => {
+  const escapeRegExp = (string: string) =>
+    string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+  const firstNameEscaped = escapeRegExp(firstName);
+  const lastNameEscaped = escapeRegExp(lastName);
+
+  const regexpStr = `${firstNameEscaped}.{0,20}?${lastNameEscaped}(.{0,100})?`;
+
+  // Construct the regular expression
+  const regex = new RegExp(regexpStr, "i");
+
+  return regex;
+};
+
+const findCompanyContactDetails = async (
+  gptModelVersion: string,
+  companyName: string,
+  contactName: string
+): Promise<ContactDetails | null> => {
+  const googleSearchQuery = `${companyName} ${contactName}`;
+
+  const hits = await askGoogle(googleSearchQuery);
+
+  console.log(hits.map((hit) => hit.link));
+
+  const companyContactPageRes = await askGPT(
+    gptModelVersion,
+    promptToSearchContactDetailsUrls({
+      companyName,
+      contactName,
+      urls: hits.map((hit) => hit.link),
+    })
+  );
+
+  const urls = extractListOfStrings(companyContactPageRes);
+
+  console.log("Company contact page res:", companyContactPageRes);
+
+  console.log("Contact URL candidates:", urls);
+
+  const chunks = (
+    await Promise.all(urls.map((url) => scrapeWebsite(url, 1000, 500)))
+  ).flat();
+
+  const faissContact = await makeVectorStore(chunks);
+
+  const contactFormat = `
+{
+  "name": "Firstname Lastname",
+  "title": "Title",
+  "cellphone": "+358 12 3456 789",
+  "email": "firstname.lastname@email.suffix"
+}
+`;
+
+  const contactRagRes = await askGPTWithRAG(
+    gptModelVersion,
+    faissContact,
+    contactName,
+    contactFormat
+  );
+
+  console.log("RAG response", contactRagRes);
+
+  console.log(contactRagRes.answer);
+
+  const contactDetails = extractJSONFromString(
+    contactRagRes.answer
+  ) as ContactDetails | null;
+
+  console.log("Contact details:", contactDetails);
+
+  return contactDetails;
+};
+
+app.post("/sandbox/google-company-search", async (req, res) => {
+  const gptModelVersion = req.query.gptModelVersion as string;
+  const companyName = req.query.companyName as string;
+  const language = req.query.language as string;
+
+  //const companyUrl = await identifyLikeliesCompanyUrl(companyName);
+  const companyFinderUrl = await identifyLikeliesCompanyFonectaFinderUrl(
+    companyName
+  );
+
+  //console.log(
+  //  `For company name "${companyName}", likeliest company URL is: ${companyUrl}`
+  //);
+
+  console.log(
+    `For company name "${companyName}", likeliest company Finder URL is: ${companyFinderUrl}`
+  );
+
+  const companyFinderWebsiteChunks = await scrapeWebsite(companyFinderUrl);
+
+  const faissFinder = await makeVectorStore(companyFinderWebsiteChunks);
+
+  //const companyWebsiteChunks = await scrapeWebsiteBySitemap(companyUrl);
+
+  //const faissWebsite = await makeVectorStore(companyWebsiteChunks);
+
+  const ceoAns = await askGPTWithRAG(
+    gptModelVersion,
+    faissFinder,
+    "Yrityksen toimitusjohtaja"
+  );
+
+  const ceoName = extractListOfStrings(
+    await askGPT(
+      gptModelVersion,
+      promptToFindPeopleNamesFromChunks({
+        chunks: [{ index: 0, text: ceoAns.answer, url: "" } as Chunk],
+      })
+    )
+  )[0];
+
+  const ceoNameSplit = ceoName.split(" ");
+
+  const ceoFirstName = ceoNameSplit[0];
+  const ceoLastName = ceoNameSplit[ceoNameSplit.length - 1];
+
+  const ceoFirstAndLastName = `${ceoFirstName} ${ceoLastName}`;
+
+  const ceoContactDetails = await findCompanyContactDetails(
+    gptModelVersion,
+    companyName,
+    ceoFirstAndLastName
+  );
+
+  const companyUrl = await askGPT(
+    gptModelVersion,
+    promptToFindCompanyWebsiteUrlFromChunks({
+      companyName,
+      chunks: companyFinderWebsiteChunks,
+    })
+  );
+
+  //const scrapedCompanyWebsiteContent = await scrapeWebsiteBySitemap(companyUrl);
+
+  /*
+  const faissCompany = await makeVectorStore(scrapedCompanyWebsiteContent);
+
+  const whatIsTheCompanyDoingQuery = `What is the main business of company ${companyName}?`;
+
+  const companySummaryRagResponse = await askGPTWithRAG(
+    gptModelVersion,
+    faissCompany,
+    whatIsTheCompanyDoingQuery
+  );
+
+  console.log(`Company summary: \n\n${companySummaryRagResponse.answer}`);
+*/
+
+  res.send({
+    companyFinderWebsite: companyFinderUrl,
+    companyCEO: ceoFirstAndLastName,
+    companyWebsite: companyUrl,
+    companyCEOContactDetails: ceoContactDetails,
+    //companySummary: companySummaryRagResponse.answer,
+  });
+});
+
+app.post("/sandbox/company/contact-search", async (req, res) => {
+  const gptModelVersion = req.query.gptModelVersion as string;
+  const companyName = req.query.companyName as string;
+  const language = req.query.language as string;
+  const contactName = req.query.contactName as string;
+
+  const contactDetails = await findCompanyContactDetails(
+    gptModelVersion,
+    companyName,
+    contactName
+  );
+
+  res.send({
+    name: contactDetails?.name,
+    title: contactDetails?.title,
+    cellphone: contactDetails?.cellphone,
+    email: contactDetails?.email,
+  });
 });

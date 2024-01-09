@@ -12,6 +12,7 @@ interface GoogleSearchResultItem {
 export const askGoogle = async (
   query: string
 ): Promise<GoogleSearchResultItem[]> => {
+  console.log(`Asking google: ${query}`);
   const urlWithQuery = `https://www.googleapis.com/customsearch/v1?key=${API_KEY}&cx=${CSE_ID}&q=${encodeURIComponent(
     query
   )}`;
