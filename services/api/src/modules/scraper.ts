@@ -21,7 +21,7 @@ const containsAnySubstring = (input: string, substrings: string[]): boolean => {
   return substrings.some((sub) => new RegExp(sub, "i").test(input));
 };
 
-const isCompanyUrlCandidate = (url: string) =>
+export const isCompanyUrlCandidate = (url: string) =>
   !containsAnySubstring(url, [
     "linkedin",
     "facebook",
@@ -35,6 +35,7 @@ const isCompanyUrlCandidate = (url: string) =>
     "wikipedia",
     "reddit",
     "twitter",
+    "finder",
   ]);
 
 const endsWithAny = (str: string, substrings: string[]): boolean => {
@@ -112,6 +113,32 @@ export const scrapeWebsite = async (
   );
 };
 
+export const scrapeWebsiteWithRetries = async (
+  url: string,
+  chunkSize: number = 500,
+  chunkOverlap: number = 100,
+  retries: number = 3
+): Promise<Chunk[]> => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await scrapeWebsite(url, chunkSize, chunkOverlap);
+    } catch (error) {
+      if (error instanceof DOMException) {
+        console.log(`Attempt ${i + 1} failed with DOMException. Retrying...`);
+        continue; // Retry if it's a DOMException
+      } else {
+        console.log(
+          "Scraping attempt failed with unhandled exception. Giving up..."
+        );
+        return [];
+      }
+      throw error; // Rethrow if it's a different kind of error
+    }
+  }
+  console.log(`All scraping attempts (${retries}) failed. Giving up...`);
+  return [];
+};
+
 function ensureHttps(url: string): string {
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
@@ -179,7 +206,10 @@ const getSitemapUrls = async (sitemapUrl: string): Promise<string[]> => {
 };
 
 export const scrapeWebsiteBySitemap = async (
-  baseUrl: string
+  baseUrl: string,
+  chunkSize: number,
+  chunkOverlap: number,
+  nRetries: number
 ): Promise<Chunk[]> => {
   const robot = await getRobot(baseUrl);
 
@@ -198,7 +228,9 @@ export const scrapeWebsiteBySitemap = async (
   const scrapedContent = (
     await Promise.all(
       [baseUrl, ...sitemapUrls].map((url) =>
-        limiter.schedule(() => scrapeWebsite(url))
+        limiter.schedule(() =>
+          scrapeWebsiteWithRetries(url, chunkSize, chunkOverlap, nRetries)
+        )
       )
     )
   ).reduce((accumulator, value) => accumulator.concat(value), []);

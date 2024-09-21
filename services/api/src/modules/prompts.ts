@@ -99,13 +99,14 @@ interface PromptToSearchContactDetailsUrlsProps {
 export const promptToSearchContactDetailsUrls = (
   props: PromptToSearchContactDetailsUrlsProps
 ) => `
-Which of the following URLs is the likeliest to contain contact information of the company ${
+Which of the following URLs are the likeliest to contain contact information of the company ${
   props.companyName
 } employee ${props.contactName}? 
 The URL should start with the base domain of company ${
   props.companyName
-} and likely contain the path "contact" or "ota yhteyttä", 
-or a variation of that. Provide just the URL as string, nothing more.
+} and may contain the path "contact" or "ota yhteyttä", 
+or a variation of that. However, do not invent an URL of your own; only use the list of URL candidates provided below.
+Provide the URLs as list of strings, nothing more.
     
 Accepted output example:
 ["https://acme.com/contact", "https://acme.fi/ota-yhteytta"]

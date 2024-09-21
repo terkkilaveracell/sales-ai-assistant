@@ -4,8 +4,9 @@ import dotenv from "dotenv";
 import {
   identifyLikeliesCompanyUrl,
   scrapeWebsite,
-  scrapeWebsiteBySitemap,
+  scrapeWebsiteWithRetries,
   identifyLikeliesCompanyFonectaFinderUrl,
+  isCompanyUrlCandidate,
   Chunk,
 } from "./modules/scraper";
 import { makeVectorStore } from "./modules/store";
@@ -104,11 +105,19 @@ ${hits.map((hit) => `\n- ${hit.link}`)}
 
   const chunkSize = 1000;
   const chunkOverlap = 0;
+  const nRetries = 3;
 
   const contents = reduceChunks(
     await Promise.all(
       hits.map(async (hit) =>
-        reduceChunks(await scrapeWebsite(hit.link, chunkSize, chunkOverlap))
+        reduceChunks(
+          await scrapeWebsiteWithRetries(
+            hit.link,
+            chunkSize,
+            chunkOverlap,
+            nRetries
+          )
+        )
       )
     )
   );
@@ -406,14 +415,16 @@ const findCompanyContactDetails = async (
 
   const hits = await askGoogle(googleSearchQuery);
 
-  console.log(hits.map((hit) => hit.link));
+  const filteredHits = hits.filter((hit) => isCompanyUrlCandidate(hit.link));
+
+  console.log(filteredHits.map((hit) => hit.link));
 
   const companyContactPageRes = await askGPT(
     gptModelVersion,
     promptToSearchContactDetailsUrls({
       companyName,
       contactName,
-      urls: hits.map((hit) => hit.link),
+      urls: filteredHits.map((hit) => hit.link),
     })
   );
 
@@ -424,10 +435,25 @@ const findCompanyContactDetails = async (
   console.log("Contact URL candidates:", urls);
 
   const chunks = (
-    await Promise.all(urls.map((url) => scrapeWebsite(url, 1000, 500)))
+    await Promise.all(
+      urls.map((url) => scrapeWebsiteWithRetries(url, 500, 100, 3))
+    )
   ).flat();
 
-  const faissContact = await makeVectorStore(chunks);
+  console.log(
+    `There are ${chunks.length} chunks in the contact URL candidates`
+  );
+
+  if (chunks.length === 0) return null;
+
+  var faissContact: FaissStore | null = null;
+
+  try {
+    faissContact = await makeVectorStore(chunks);
+  } catch {
+    console.log("Creating the vector store failed. Giving up...");
+    return null;
+  }
 
   const contactFormat = `
 {
@@ -437,6 +463,8 @@ const findCompanyContactDetails = async (
   "email": "firstname.lastname@email.suffix"
 }
 `;
+
+  if (faissContact === null) return null;
 
   const contactRagRes = await askGPTWithRAG(
     gptModelVersion,
@@ -476,41 +504,22 @@ app.post("/sandbox/google-company-search", async (req, res) => {
     `For company name "${companyName}", likeliest company Finder URL is: ${companyFinderUrl}`
   );
 
-  const companyFinderWebsiteChunks = await scrapeWebsite(companyFinderUrl);
+  const chunkSize = 1000;
+  const chunkOverlap = 500;
+  const nRetries = 3;
+
+  const companyFinderWebsiteChunks = await scrapeWebsiteWithRetries(
+    companyFinderUrl,
+    chunkSize,
+    chunkOverlap,
+    nRetries
+  );
 
   const faissFinder = await makeVectorStore(companyFinderWebsiteChunks);
 
   //const companyWebsiteChunks = await scrapeWebsiteBySitemap(companyUrl);
 
   //const faissWebsite = await makeVectorStore(companyWebsiteChunks);
-
-  const ceoAns = await askGPTWithRAG(
-    gptModelVersion,
-    faissFinder,
-    "Yrityksen toimitusjohtaja"
-  );
-
-  const ceoName = extractListOfStrings(
-    await askGPT(
-      gptModelVersion,
-      promptToFindPeopleNamesFromChunks({
-        chunks: [{ index: 0, text: ceoAns.answer, url: "" } as Chunk],
-      })
-    )
-  )[0];
-
-  const ceoNameSplit = ceoName.split(" ");
-
-  const ceoFirstName = ceoNameSplit[0];
-  const ceoLastName = ceoNameSplit[ceoNameSplit.length - 1];
-
-  const ceoFirstAndLastName = `${ceoFirstName} ${ceoLastName}`;
-
-  const ceoContactDetails = await findCompanyContactDetails(
-    gptModelVersion,
-    companyName,
-    ceoFirstAndLastName
-  );
 
   const companyUrl = await askGPT(
     gptModelVersion,
@@ -520,21 +529,40 @@ app.post("/sandbox/google-company-search", async (req, res) => {
     })
   );
 
-  //const scrapedCompanyWebsiteContent = await scrapeWebsiteBySitemap(companyUrl);
-
-  /*
-  const faissCompany = await makeVectorStore(scrapedCompanyWebsiteContent);
-
-  const whatIsTheCompanyDoingQuery = `What is the main business of company ${companyName}?`;
-
-  const companySummaryRagResponse = await askGPTWithRAG(
+  const ceoAns = await askGPTWithRAG(
     gptModelVersion,
-    faissCompany,
-    whatIsTheCompanyDoingQuery
+    faissFinder,
+    "Yrityksen toimitusjohtaja"
   );
 
-  console.log(`Company summary: \n\n${companySummaryRagResponse.answer}`);
-*/
+  var ceoFirstAndLastName: string | null = null;
+  var ceoContactDetails: ContactDetails | null = null;
+
+  try {
+    const ceoName = extractListOfStrings(
+      await askGPT(
+        gptModelVersion,
+        promptToFindPeopleNamesFromChunks({
+          chunks: [{ index: 0, text: ceoAns.answer, url: "" } as Chunk],
+        })
+      )
+    )[0];
+
+    const ceoNameSplit = ceoName.split(" ");
+
+    const ceoFirstName = ceoNameSplit[0];
+    const ceoLastName = ceoNameSplit[ceoNameSplit.length - 1];
+
+    ceoFirstAndLastName = `${ceoFirstName} ${ceoLastName}`;
+
+    ceoContactDetails = await findCompanyContactDetails(
+      gptModelVersion,
+      companyName,
+      ceoFirstAndLastName
+    );
+  } catch {
+    console.log("Failed to extract contact details. Giving up...");
+  }
 
   res.send({
     companyFinderWebsite: companyFinderUrl,

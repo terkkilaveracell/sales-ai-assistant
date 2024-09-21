@@ -11,7 +11,7 @@ import { SalesAssistantPage } from "./pages/SalesAssistantPage/SalesAssistantPag
 import { SandboxPage } from "./pages/SandboxPage/SandboxPage";
 
 function App() {
-  const defaultGptModelVersion = "gpt-4"; // "gpt-3.5-turbo"
+  const defaultGptModelVersion = "gpt-4o"; // "gpt-3.5-turbo"
   const defaultLanguage = "Finnish";
 
   const [gptModelVersion, setGptModelVersion] = useState(
