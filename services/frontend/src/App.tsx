@@ -9,6 +9,7 @@ import { ConfigGroup } from "./components/ConfigGroup/ConfigGroup";
 import { AppNavbar } from "./components/AppNavbar/AppNavbar";
 import { SalesAssistantPage } from "./pages/SalesAssistantPage/SalesAssistantPage";
 import { SandboxPage } from "./pages/SandboxPage/SandboxPage";
+import { StrategistPage } from "./pages/StrategistPage/StrategistPage";
 
 function App() {
   const defaultGptModelVersion = "gpt-4o"; // "gpt-3.5-turbo"
@@ -74,6 +75,15 @@ function App() {
               path="/sandbox"
               element={
                 <SandboxPage
+                  gptModelVersion={gptModelVersion}
+                  language={language}
+                />
+              }
+            />
+            <Route
+              path="/strategist"
+              element={
+                <StrategistPage
                   gptModelVersion={gptModelVersion}
                   language={language}
                 />

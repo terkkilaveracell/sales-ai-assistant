@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Group, AppShell, Button, Box } from "@mantine/core";
-import { IconHome, IconBottle } from "@tabler/icons-react";
+import { IconHome, IconBottle, IconBulb } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { Link } from "react-router-dom";
 
@@ -9,6 +9,7 @@ import classes from "./AppNavbar.module.css";
 const data = [
   { link: "/", label: "Sales assistant", icon: IconHome },
   { link: "/sandbox", label: "Sandbox", icon: IconBottle },
+  { link: "/strategist", label: "Strategist", icon: IconBulb },
 ];
 
 export const AppNavbar = () => {

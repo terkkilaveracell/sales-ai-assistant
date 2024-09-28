@@ -1,25 +1,36 @@
-import express from "express";
-import cors from "cors";
 import dotenv from "dotenv";
-import {
-  identifyLikeliesCompanyUrl,
-  scrapeWebsite,
-  scrapeWebsiteWithRetries,
-  identifyLikeliesCompanyFonectaFinderUrl,
-  isCompanyUrlCandidate,
-  Chunk,
-} from "./modules/scraper";
-import { makeVectorStore } from "./modules/store";
-import { askGPTWithRAG, askGPT } from "./modules/openai";
-import { FaissStore } from "langchain/vectorstores/faiss";
-import { askGoogle } from "./modules/google";
-import {
-  promptToFindCompanyWebsiteUrlFromChunks,
-  promptToFindPeopleNamesFromChunks,
-  promptToSearchContactDetailsUrls,
-} from "./modules/prompts";
 
 dotenv.config();
+
+import express from "express";
+import cors from "cors";
+
+import {
+  identifyLikeliesCompanyUrl,
+  scrapeAndChunkWebsite,
+  scrapeAndChunkWebsiteWithRetries,
+  identifyLikeliesCompanyFonectaFinderUrl,
+  Chunk,
+} from "./modules/scraper";
+import { Assistant } from "./modules/assistant";
+import { OpenAI } from "./modules/openai";
+
+import { askGoogle } from "./modules/google";
+
+/*
+import { GraphQLClient, gql } from "graphql-request";
+
+// Initialize the GraphQL client with the endpoint URL
+const endpoint = "https://api.monday.com/v2"; // Example GraphQL API
+const graphQLClient = new GraphQLClient(endpoint, {
+  headers: {
+    // If authentication is required, add headers here
+    // Authorization: `Bearer YOUR_TOKEN`,
+  },
+});
+*/
+
+const openAI = new OpenAI();
 
 const app = express();
 
@@ -34,8 +45,6 @@ app.use(
 app.get("/hello", (req, res) => {
   res.send("Hello World!");
 });
-
-var VECTOR_STORE: FaissStore | undefined = undefined;
 
 interface ContactDetails {
   name: string;
@@ -99,23 +108,21 @@ ${hits.map((hit) => `\n- ${hit.link}`)}
 
   console.log(prompt2);
 
-  const foo = await askGPT(gptModelVersion, prompt2);
+  const foo = await openAI.ask(prompt2);
 
   console.log(foo);
 
   const chunkSize = 1000;
-  const chunkOverlap = 0;
-  const nRetries = 3;
+  const numRetries = 3;
 
   const contents = reduceChunks(
     await Promise.all(
       hits.map(async (hit) =>
         reduceChunks(
-          await scrapeWebsiteWithRetries(
+          await scrapeAndChunkWebsiteWithRetries(
             hit.link,
             chunkSize,
-            chunkOverlap,
-            nRetries
+            numRetries
           )
         )
       )
@@ -135,8 +142,14 @@ ${contents.text}
 
   //console.log(prompt);
 
-  const scrapedCompanyWebsiteContent = await scrapeWebsite(companyUrl);
-  const scrapedCompanyFinderContent = await scrapeWebsite(companyFinderUrl);
+  const scrapedCompanyWebsiteContent = await scrapeAndChunkWebsite(
+    companyUrl,
+    chunkSize
+  );
+  const scrapedCompanyFinderContent = await scrapeAndChunkWebsite(
+    companyFinderUrl,
+    chunkSize
+  );
 
   const scrapedContent = [
     ...scrapedCompanyWebsiteContent,
@@ -147,13 +160,11 @@ ${contents.text}
     `Making vector store of the scraped content (${scrapedContent.length} chunks)`
   );
 
-  VECTOR_STORE = await makeVectorStore(scrapedContent);
+  const assistant = new Assistant(scrapedContent);
 
   const whatIsTheCompanyDoingQuery = `What is the main business of company ${companyName}?`;
 
-  const companySummaryRagResponse = await askGPTWithRAG(
-    gptModelVersion,
-    VECTOR_STORE,
+  const companySummaryRagResponse = await assistant.ask(
     whatIsTheCompanyDoingQuery
   );
 
@@ -161,27 +172,12 @@ ${contents.text}
 
   const whoIsTheCEOQuery = `Who is the CEO of the company ${companyName}?`;
 
-  const whoIsTheCEORagResponse = await askGPTWithRAG(
-    gptModelVersion,
-    VECTOR_STORE,
-    whoIsTheCEOQuery,
-    "String, given as Firstname Lastname. Middle names, if available, are OK. Avoid titles such as CEO, Sir, Madam, PhD, etc.",
-    "'John Doe'"
-  );
+  const whoIsTheCEORagResponse = await assistant.ask(whoIsTheCEOQuery);
 
   console.log(`Company CEO: \n\n${whoIsTheCEORagResponse.answer}`);
 
-  const contactDetailsRagResponse = await askGPTWithRAG(
-    gptModelVersion,
-    VECTOR_STORE,
-    `What are the contact details (email, phone, title) for ${whoIsTheCEORagResponse.answer}?`,
-    `JSON with the following structure
-    {
-      'name': 'Firstname Lastname',
-      'title': 'Title',
-      'cellphone': '+358 12 3456789',
-      'email': 'firstname.lastname@email.suffix'
-    }`
+  const contactDetailsRagResponse = await assistant.ask(
+    `What are the contact details (email, phone, title) for ${whoIsTheCEORagResponse.answer}?`
   );
 
   console.log("Contact details:\n", contactDetailsRagResponse.answer);
@@ -221,12 +217,11 @@ app.post("/company/contacts", async (req, res) => {
   const hits = (await askGoogle(`${companyName} contact`)).slice(0, 3);
 
   const chunkSize = 1000;
-  const chunkOverlap = 0;
 
   const contents = reduceChunks(
     await Promise.all(
       hits.map(async (hit) =>
-        reduceChunks(await scrapeWebsite(hit.link, chunkSize, chunkOverlap))
+        reduceChunks(await scrapeAndChunkWebsite(hit.link, chunkSize))
       )
     )
   );
@@ -301,37 +296,11 @@ Veracell
 
   console.log(prompt);
 
-  const response = await askGPT(gptModelVersion, prompt);
+  const response = await openAI.ask(prompt);
 
   console.log("Response email:\n\n", response);
 
   res.send({ email: response });
-});
-
-app.post("/company/ask", async (req, res) => {
-  if (VECTOR_STORE === undefined) return;
-
-  const gptModelVersion = req.query.gptModelVersion as string;
-  const question = req.query.question as string;
-  const language = req.query.language as string;
-
-  console.log(`Using GPT model version: ${gptModelVersion}`);
-
-  const ragResponse = await askGPTWithRAG(
-    gptModelVersion,
-    VECTOR_STORE,
-    question
-  );
-
-  res.send({
-    response: ragResponse,
-  });
-});
-
-const port = 3000;
-
-app.listen(port, () => {
-  console.log(`API server listening at http://localhost:${port}`);
 });
 
 app.post("/sandbox/google-search", async (req, res) => {
@@ -342,253 +311,4 @@ app.post("/sandbox/google-search", async (req, res) => {
   const googleSearchResults = await askGoogle(googleSearchString);
 
   res.send({ googleSearchResults });
-});
-
-interface PromptProps {
-  instruction: string;
-  exampleOutput: string[];
-  backgroundInformation: string;
-}
-
-const makePrompt = (props: PromptProps) => {
-  return `
-Instruction:
-${props.instruction}
-
-Example output:
-${props.exampleOutput}
-
-Background information:
-${props.backgroundInformation}
-
-  `;
-};
-
-const extractListOfStrings = (jsonString: string): string[] => {
-  try {
-    const result = JSON.parse(jsonString);
-    // Validate if the result is an array of strings
-    if (
-      Array.isArray(result) &&
-      result.every((item) => typeof item === "string")
-    ) {
-      return result;
-    } else {
-      throw new Error("Parsed data is not an array of strings");
-    }
-  } catch (error) {
-    console.error("Error parsing JSON string:", error);
-    return [];
-  }
-};
-
-//const extractJSONFromString = (responseString: string): string | null {
-//  // This regex looks for anything between ```json and ```
-//  const jsonMatch = responseString.match(/```json([^`]*)```/);
-//  return jsonMatch ? jsonMatch[1].trim() : null; // Trim to remove any whitespace around the JSON
-//}
-
-const makeContactSearchRegExp = (
-  firstName: string,
-  lastName: string
-): RegExp => {
-  const escapeRegExp = (string: string) =>
-    string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-  const firstNameEscaped = escapeRegExp(firstName);
-  const lastNameEscaped = escapeRegExp(lastName);
-
-  const regexpStr = `${firstNameEscaped}.{0,20}?${lastNameEscaped}(.{0,100})?`;
-
-  // Construct the regular expression
-  const regex = new RegExp(regexpStr, "i");
-
-  return regex;
-};
-
-const findCompanyContactDetails = async (
-  gptModelVersion: string,
-  companyName: string,
-  contactName: string
-): Promise<ContactDetails | null> => {
-  const googleSearchQuery = `${companyName} ${contactName}`;
-
-  const hits = await askGoogle(googleSearchQuery);
-
-  const filteredHits = hits.filter((hit) => isCompanyUrlCandidate(hit.link));
-
-  console.log(filteredHits.map((hit) => hit.link));
-
-  const companyContactPageRes = await askGPT(
-    gptModelVersion,
-    promptToSearchContactDetailsUrls({
-      companyName,
-      contactName,
-      urls: filteredHits.map((hit) => hit.link),
-    })
-  );
-
-  const urls = extractListOfStrings(companyContactPageRes);
-
-  console.log("Company contact page res:", companyContactPageRes);
-
-  console.log("Contact URL candidates:", urls);
-
-  const chunks = (
-    await Promise.all(
-      urls.map((url) => scrapeWebsiteWithRetries(url, 500, 100, 3))
-    )
-  ).flat();
-
-  console.log(
-    `There are ${chunks.length} chunks in the contact URL candidates`
-  );
-
-  if (chunks.length === 0) return null;
-
-  var faissContact: FaissStore | null = null;
-
-  try {
-    faissContact = await makeVectorStore(chunks);
-  } catch {
-    console.log("Creating the vector store failed. Giving up...");
-    return null;
-  }
-
-  const contactFormat = `
-{
-  "name": "Firstname Lastname",
-  "title": "Title",
-  "cellphone": "+358 12 3456 789",
-  "email": "firstname.lastname@email.suffix"
-}
-`;
-
-  if (faissContact === null) return null;
-
-  const contactRagRes = await askGPTWithRAG(
-    gptModelVersion,
-    faissContact,
-    contactName,
-    contactFormat
-  );
-
-  console.log("RAG response", contactRagRes);
-
-  console.log(contactRagRes.answer);
-
-  const contactDetails = extractJSONFromString(
-    contactRagRes.answer
-  ) as ContactDetails | null;
-
-  console.log("Contact details:", contactDetails);
-
-  return contactDetails;
-};
-
-app.post("/sandbox/google-company-search", async (req, res) => {
-  const gptModelVersion = req.query.gptModelVersion as string;
-  const companyName = req.query.companyName as string;
-  const language = req.query.language as string;
-
-  //const companyUrl = await identifyLikeliesCompanyUrl(companyName);
-  const companyFinderUrl = await identifyLikeliesCompanyFonectaFinderUrl(
-    companyName
-  );
-
-  //console.log(
-  //  `For company name "${companyName}", likeliest company URL is: ${companyUrl}`
-  //);
-
-  console.log(
-    `For company name "${companyName}", likeliest company Finder URL is: ${companyFinderUrl}`
-  );
-
-  const chunkSize = 1000;
-  const chunkOverlap = 500;
-  const nRetries = 3;
-
-  const companyFinderWebsiteChunks = await scrapeWebsiteWithRetries(
-    companyFinderUrl,
-    chunkSize,
-    chunkOverlap,
-    nRetries
-  );
-
-  const faissFinder = await makeVectorStore(companyFinderWebsiteChunks);
-
-  //const companyWebsiteChunks = await scrapeWebsiteBySitemap(companyUrl);
-
-  //const faissWebsite = await makeVectorStore(companyWebsiteChunks);
-
-  const companyUrl = await askGPT(
-    gptModelVersion,
-    promptToFindCompanyWebsiteUrlFromChunks({
-      companyName,
-      chunks: companyFinderWebsiteChunks,
-    })
-  );
-
-  const ceoAns = await askGPTWithRAG(
-    gptModelVersion,
-    faissFinder,
-    "Yrityksen toimitusjohtaja"
-  );
-
-  var ceoFirstAndLastName: string | null = null;
-  var ceoContactDetails: ContactDetails | null = null;
-
-  try {
-    const ceoName = extractListOfStrings(
-      await askGPT(
-        gptModelVersion,
-        promptToFindPeopleNamesFromChunks({
-          chunks: [{ index: 0, text: ceoAns.answer, url: "" } as Chunk],
-        })
-      )
-    )[0];
-
-    const ceoNameSplit = ceoName.split(" ");
-
-    const ceoFirstName = ceoNameSplit[0];
-    const ceoLastName = ceoNameSplit[ceoNameSplit.length - 1];
-
-    ceoFirstAndLastName = `${ceoFirstName} ${ceoLastName}`;
-
-    ceoContactDetails = await findCompanyContactDetails(
-      gptModelVersion,
-      companyName,
-      ceoFirstAndLastName
-    );
-  } catch {
-    console.log("Failed to extract contact details. Giving up...");
-  }
-
-  res.send({
-    companyFinderWebsite: companyFinderUrl,
-    companyCEO: ceoFirstAndLastName,
-    companyWebsite: companyUrl,
-    companyCEOContactDetails: ceoContactDetails,
-    //companySummary: companySummaryRagResponse.answer,
-  });
-});
-
-app.post("/sandbox/company/contact-search", async (req, res) => {
-  const gptModelVersion = req.query.gptModelVersion as string;
-  const companyName = req.query.companyName as string;
-  const language = req.query.language as string;
-  const contactName = req.query.contactName as string;
-
-  const contactDetails = await findCompanyContactDetails(
-    gptModelVersion,
-    companyName,
-    contactName
-  );
-
-  res.send({
-    name: contactDetails?.name,
-    title: contactDetails?.title,
-    cellphone: contactDetails?.cellphone,
-    email: contactDetails?.email,
-  });
 });

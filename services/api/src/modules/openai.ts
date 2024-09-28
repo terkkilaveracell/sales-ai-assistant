@@ -1,25 +1,34 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
-import { FaissStore } from "langchain/vectorstores/faiss";
-import { Chunk } from "./scraper";
-import { OpenAI } from "openai";
-import { Stream } from "openai/streaming";
+import { Chunk } from "./scraper.ts";
+import { AzureOpenAI } from "openai";
+import { Index } from "faiss-node";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
+const GPT_MODEL_VERSION = "gpt-4o";
 
-export interface RAGResponse {
-  prompt: string;
-  answer: string;
-  chunks: Chunk[];
+export class OpenAI {
+  private azureOpenAIClient: AzureOpenAI = new AzureOpenAI({
+    apiKey: process.env["OPENAI_API_KEY"],
+    apiVersion: process.env["OPENAI_API_VERSION"],
+    endpoint: process.env["OPENAI_ENDPOINT"],
+    deployment: process.env["GPT4o_DEPLOYMENT_NAME"],
+  });
+
+  ask = async (query: string): Promise<string> => {
+    const response = await this.azureOpenAIClient.chat.completions.create({
+      messages: [{ role: "user", content: query }],
+      model: GPT_MODEL_VERSION,
+      max_tokens: MAX_TOKENS,
+      temperature: TEMPERATURE,
+      stream: false,
+    });
+    return response.choices[0].message.content || "";
+  };
 }
 
-console.log(`Using OpenAI API Key: ${process.env["OPENAI_API_KEY"]}`);
-
-const openai = new OpenAI({
-  apiKey: process.env["OPENAI_API_KEY"], // This is the default and can be omitted
-});
-
 export const askGPT = async (
+  openai: AzureOpenAI,
   gptModelVersion: string,
   question: string,
   maxTokens: number = MAX_TOKENS,
@@ -36,90 +45,14 @@ export const askGPT = async (
   return response.choices[0].message.content || "";
 };
 
-export const askGPTStream = async (
-  gptModelVersion: string,
-  question: string,
-  maxTokens: number = MAX_TOKENS,
-  temperature: number = TEMPERATURE
-): Promise<Stream<OpenAI.Chat.Completions.ChatCompletionChunk>> => {
-  const response = await openai.chat.completions.create({
-    messages: [{ role: "user", content: question }],
-    model: gptModelVersion,
-    max_tokens: maxTokens,
-    temperature: temperature,
-    stream: true,
-  });
-  return response;
-};
+export const makeEmbedding = async (
+  openai: AzureOpenAI,
+  embeddingModel: string,
+  query: string
+): Promise<number[]> => {
+  const embedding = await openai.embeddings
+    .create({ input: query, model: embeddingModel })
+    .then((res) => res.data[0].embedding);
 
-export const askGPTWithRAG = async (
-  gptModelVersion: string,
-  vectorStore: FaissStore,
-  query: string,
-  format?: string,
-  example?: string
-): Promise<RAGResponse> => {
-  const hits = await vectorStore.similaritySearchWithScore(query);
-
-  console.log(query);
-  hits.forEach((hit) => {
-    console.log(hit);
-  });
-
-  const printFormat = () => {
-    return `
-
-Output format:
-${format}
-
-`;
-  };
-
-  const printExamples = () => {
-    return `
-
-Output example:
-${example}
-
-    `;
-  };
-
-  const prompt = `
-
-Query:
-${query}
-
-General instructions:
-Use the following reference material, scraped from a website, to answer the provided query.
-The reference material is split into chunks, and can originate from different websites. Each chunk is assocated with euclidean distance score.
-Use the score as a guideline when weighing the relevance of each chunk in forming the response. Smaller euclidean distance means higher similarity.
-
-${format ? printFormat() : ""}
-
-${example ? printExamples() : ""}
-
-Reference material:
-
-${hits
-  .map(([hit, distance]) => {
-    return `Distance: ${distance}\nURL: ${hit.metadata.url}\nChunk: ${hit.pageContent}\n`;
-  })
-  .join("\n")}
-
-`;
-
-  console.log(prompt);
-
-  const answer = await askGPT(gptModelVersion, prompt, MAX_TOKENS, TEMPERATURE);
-
-  const chunks = hits.map(
-    ([hit, distance]) =>
-      ({
-        url: hit.metadata.url,
-        index: hit.metadata.id,
-        text: hit.pageContent,
-      } as Chunk)
-  );
-
-  return { prompt, answer, chunks };
+  return embedding;
 };

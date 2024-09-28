@@ -1,11 +1,72 @@
 import axios, { AxiosInstance } from "axios";
 import { parseString } from "xml2js";
 import robotsParser, { Robot } from "robots-parser";
-import { CheerioWebBaseLoader } from "langchain/document_loaders/web/cheerio";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { HtmlToTextTransformer } from "langchain/document_transformers/html_to_text";
 import { askGoogle } from "./google";
 import Bottleneck from "bottleneck";
+
+import * as cheerio from "cheerio";
+
+// Function to split text into chunks
+export function splitText(text: string, chunkSize: number): string[] {
+  const chunks: string[] = [];
+  let currentChunk = "";
+
+  const sentences = text.match(/[^\.!\?]+[\.!\?]+/g) || [text];
+
+  for (const sentence of sentences) {
+    if ((currentChunk + sentence).length > chunkSize) {
+      if (currentChunk) {
+        chunks.push(currentChunk.trim());
+        currentChunk = "";
+      }
+    }
+    currentChunk += sentence + " ";
+  }
+
+  if (currentChunk) {
+    chunks.push(currentChunk.trim());
+  }
+
+  return chunks;
+}
+
+// Main function to scrape and chunk content
+export async function scrapeAndChunkWebsite(
+  url: string,
+  chunkSize: number
+): Promise<Chunk[]> {
+  try {
+    // Fetch the HTML content from the URL
+    const { data: html } = await axios.get(url);
+
+    // Load HTML into Cheerio for parsing
+    const $ = cheerio.load(html);
+
+    // Remove script and style tags for cleaner text
+    $("script, style, noscript").remove();
+
+    // Extract text content from the body
+    const rawText = $("body").text();
+
+    // Normalize whitespace and remove unnecessary line breaks
+    const normalizedText = rawText.replace(/\s+/g, " ").trim();
+
+    // Split the text into chunks suitable for RAG
+    const splittedText = splitText(normalizedText, chunkSize);
+
+    return splittedText.map(
+      (chunk, index) =>
+        ({
+          url,
+          index,
+          text: chunk,
+        } as Chunk)
+    );
+  } catch (error) {
+    console.error("Error scraping the URL:", error);
+    return [];
+  }
+}
 
 const limiter = new Bottleneck({
   maxConcurrent: 5,
@@ -83,45 +144,14 @@ export const identifyLikeliesCompanyFonectaFinderUrl = async (
   return websiteCandidates[0].url;
 };
 
-export const scrapeWebsite = async (
+export const scrapeAndChunkWebsiteWithRetries = async (
   url: string,
   chunkSize: number = 500,
-  chunkOverlap: number = 100
+  numRetries: number = 3
 ): Promise<Chunk[]> => {
-  const loader = new CheerioWebBaseLoader(url);
-
-  const docs = await loader.load();
-
-  const transformer = new HtmlToTextTransformer();
-
-  const splitter = RecursiveCharacterTextSplitter.fromLanguage("html", {
-    chunkSize: chunkSize,
-    chunkOverlap: chunkOverlap,
-  });
-
-  const sequence = splitter.pipe(transformer);
-
-  const newDocuments = await sequence.invoke(docs);
-
-  return newDocuments.map(
-    (doc, index) =>
-      ({
-        url,
-        index,
-        text: doc.pageContent,
-      } as Chunk)
-  );
-};
-
-export const scrapeWebsiteWithRetries = async (
-  url: string,
-  chunkSize: number = 500,
-  chunkOverlap: number = 100,
-  retries: number = 3
-): Promise<Chunk[]> => {
-  for (let i = 0; i < retries; i++) {
+  for (let i = 0; i < numRetries; i++) {
     try {
-      return await scrapeWebsite(url, chunkSize, chunkOverlap);
+      return await scrapeAndChunkWebsite(url, chunkSize);
     } catch (error) {
       if (error instanceof DOMException) {
         console.log(`Attempt ${i + 1} failed with DOMException. Retrying...`);
@@ -135,7 +165,7 @@ export const scrapeWebsiteWithRetries = async (
       throw error; // Rethrow if it's a different kind of error
     }
   }
-  console.log(`All scraping attempts (${retries}) failed. Giving up...`);
+  console.log(`All scraping attempts (${numRetries}) failed. Giving up...`);
   return [];
 };
 
@@ -205,10 +235,9 @@ const getSitemapUrls = async (sitemapUrl: string): Promise<string[]> => {
   return sitemapUrls;
 };
 
-export const scrapeWebsiteBySitemap = async (
+export const scrapeAndChunkWebsiteBySitemap = async (
   baseUrl: string,
   chunkSize: number,
-  chunkOverlap: number,
   nRetries: number
 ): Promise<Chunk[]> => {
   const robot = await getRobot(baseUrl);
@@ -229,7 +258,7 @@ export const scrapeWebsiteBySitemap = async (
     await Promise.all(
       [baseUrl, ...sitemapUrls].map((url) =>
         limiter.schedule(() =>
-          scrapeWebsiteWithRetries(url, chunkSize, chunkOverlap, nRetries)
+          scrapeAndChunkWebsiteWithRetries(url, chunkSize, nRetries)
         )
       )
     )
