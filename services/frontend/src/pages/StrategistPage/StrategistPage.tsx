@@ -84,7 +84,7 @@ export const StrategistPage = (props: StrategistPageProps) => {
           <Title order={6}>Search results</Title>
           <Table
             stickyHeader
-            stickyHeaderOffset={60}
+            //stickyHeaderOffset={60}
             //style={{ tableLayout: "fixed", width: "100%" }}
           >
             <Table.Thead>

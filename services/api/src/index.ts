@@ -6,16 +6,20 @@ import express from "express";
 import cors from "cors";
 
 import {
-  identifyLikeliesCompanyUrl,
   scrapeAndChunkWebsite,
   scrapeAndChunkWebsiteWithRetries,
-  identifyLikeliesCompanyFonectaFinderUrl,
+  identifyLikeliestCompanyFonectaFinderUrl,
+  identifyLikeliestCompanyUrl,
   Chunk,
 } from "./modules/scraper";
 import { Assistant } from "./modules/assistant";
 import { OpenAI } from "./modules/openai";
 
-import { askGoogle } from "./modules/google";
+import { isUrlAllowed } from "./modules/scraper";
+
+import { askGoogle } from "./services/googleService";
+
+import companyRoutes from "./routes/companyRoutes";
 
 /*
 import { GraphQLClient, gql } from "graphql-request";
@@ -46,6 +50,8 @@ app.use(
     origin: "http://localhost:8000", // URL of your frontend service
   })
 );
+
+app.use("/", companyRoutes);
 
 // Hello World endpoint
 app.get("/hello", (req, res) => {
@@ -87,8 +93,8 @@ app.post("/company/details", async (req, res) => {
 
   console.log(`Using GPT model version: ${gptModelVersion}`);
 
-  const companyUrl = await identifyLikeliesCompanyUrl(companyName);
-  const companyFinderUrl = await identifyLikeliesCompanyFonectaFinderUrl(
+  const companyUrl = await identifyLikeliestCompanyUrl(companyName);
+  const companyFinderUrl = await identifyLikeliestCompanyFonectaFinderUrl(
     companyName
   );
 
@@ -309,6 +315,7 @@ Veracell
   res.send({ email: response });
 });
 
+/*
 app.post("/company/google-search", async (req, res) => {
   const companyName = req.query.companyName as string;
 
@@ -340,10 +347,15 @@ app.post("/company/google-search", async (req, res) => {
       }))
   );
 
-  console.log(JSON.stringify(googleSearchResultsFlat));
+  const googleSearchResultsFiltered = googleSearchResultsFlat.filter((el) =>
+    isUrlAllowed(el.google_search_result.link)
+  );
 
-  res.send(googleSearchResultsFlat);
+  console.log(JSON.stringify(googleSearchResultsFiltered));
+
+  res.send(googleSearchResultsFiltered);
 });
+*/
 
 app.post("/sandbox/google-search", async (req, res) => {
   const googleSearchString = req.query.googleSearchString as string;

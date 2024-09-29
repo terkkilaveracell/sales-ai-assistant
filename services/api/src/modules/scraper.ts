@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import { parseString } from "xml2js";
 import robotsParser, { Robot } from "robots-parser";
-import { askGoogle } from "./google";
+import { askGoogle } from "../services/googleService";
 import Bottleneck from "bottleneck";
 
 import * as cheerio from "cheerio";
@@ -82,7 +82,7 @@ const containsAnySubstring = (input: string, substrings: string[]): boolean => {
   return substrings.some((sub) => new RegExp(sub, "i").test(input));
 };
 
-export const isCompanyUrlCandidate = (url: string) =>
+export const isUrlAllowed = (url: string) =>
   !containsAnySubstring(url, [
     "linkedin",
     "facebook",
@@ -97,7 +97,7 @@ export const isCompanyUrlCandidate = (url: string) =>
     "reddit",
     "twitter",
     "finder",
-  ]);
+  ]) && endsWithAny(getBaseUrl(url), [".fi", ".com"]);
 
 const endsWithAny = (str: string, substrings: string[]): boolean => {
   return substrings.some((substring) => str.endsWith(substring));
@@ -111,37 +111,6 @@ const getBaseUrl = (url: string): string => {
     console.error("Invalid URL:", error);
     return "";
   }
-};
-
-export const identifyLikeliesCompanyUrl = async (
-  companyName: string
-): Promise<string> => {
-  const searchResults = await askGoogle(companyName);
-
-  const companyWebsiteCandidates = searchResults
-    .map((el) => ({ url: el.link, snippet: el.snippet }))
-    .filter((el) => isCompanyUrlCandidate(el.url))
-    .map((el) => ({ url: getBaseUrl(el.url), snippet: el.snippet }))
-    .filter((el) => endsWithAny(el.url, [".fi", ".com"]));
-
-  console.log(searchResults.map((hit) => hit.link));
-  console.log(companyWebsiteCandidates);
-
-  return companyWebsiteCandidates[0].url;
-};
-
-export const identifyLikeliesCompanyFonectaFinderUrl = async (
-  companyName: string
-): Promise<string> => {
-  const searchResults = await askGoogle(`${companyName} finder`);
-
-  const websiteCandidates = searchResults
-    .map((el) => ({ url: el.link, snippet: el.snippet }))
-    .filter((el) => el.url.indexOf("finder.fi") !== -1);
-
-  console.log(websiteCandidates);
-
-  return websiteCandidates[0].url;
 };
 
 export const scrapeAndChunkWebsiteWithRetries = async (
@@ -265,4 +234,33 @@ export const scrapeAndChunkWebsiteBySitemap = async (
   ).reduce((accumulator, value) => accumulator.concat(value), []);
 
   return scrapedContent;
+};
+
+export const identifyLikeliestCompanyUrl = async (
+  companyName: string
+): Promise<string> => {
+  const searchResults = await askGoogle(companyName);
+
+  const companyWebsiteCandidates = searchResults
+    .map((el) => ({ url: el.link, snippet: el.snippet }))
+    .filter((el) => isUrlAllowed(el.url));
+
+  console.log(searchResults.map((hit) => hit.link));
+  console.log(companyWebsiteCandidates);
+
+  return companyWebsiteCandidates[0].url;
+};
+
+export const identifyLikeliestCompanyFonectaFinderUrl = async (
+  companyName: string
+): Promise<string> => {
+  const searchResults = await askGoogle(`${companyName} finder`);
+
+  const websiteCandidates = searchResults
+    .map((el) => ({ url: el.link, snippet: el.snippet }))
+    .filter((el) => el.url.indexOf("finder.fi") !== -1);
+
+  console.log(websiteCandidates);
+
+  return websiteCandidates[0].url;
 };
