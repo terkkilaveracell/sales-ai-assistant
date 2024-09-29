@@ -1,10 +1,10 @@
-FROM node:14.16
+FROM node:20-slim
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY src ./
 COPY tsconfig.json .
