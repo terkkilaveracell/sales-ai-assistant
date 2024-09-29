@@ -1,7 +1,4 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from "axios";
-import { Chunk } from "./scraper.ts";
 import { AzureOpenAI } from "openai";
-import { Index } from "faiss-node";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;

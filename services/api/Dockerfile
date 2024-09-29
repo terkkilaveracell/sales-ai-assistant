@@ -1,17 +1,14 @@
-FROM node:20
+FROM node:20-slim
 
 WORKDIR /usr/src/app
 
-COPY package*.json ./
+COPY package.json package-lock.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY src/ ./
 COPY tsconfig.json .
 
-#RUN npm run build
-
 EXPOSE 3000
 
-#CMD ["node", "dist/index.js"]
 CMD ["npm", "run", "start"]
