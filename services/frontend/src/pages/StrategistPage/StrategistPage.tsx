@@ -1,6 +1,14 @@
 import { useState, ChangeEvent } from "react";
 
-import { Grid, Box, Button, Textarea, Title, Space } from "@mantine/core";
+import {
+  Grid,
+  Box,
+  Button,
+  Textarea,
+  Title,
+  Space,
+  Table,
+} from "@mantine/core";
 
 import axios from "axios";
 
@@ -9,8 +17,13 @@ interface GoogleSearchResultItem {
   snippet: string;
 }
 
+interface GoogleSearchQueryAndResultItem {
+  google_search_query: string;
+  google_search_result: GoogleSearchResultItem;
+}
+
 interface GoogleSearchResponse {
-  googleSearchResults: GoogleSearchResultItem[];
+  googleSearchQueriesAndResults: GoogleSearchQueryAndResultItem[];
 }
 
 interface StrategistPageProps {
@@ -18,45 +31,43 @@ interface StrategistPageProps {
   language: string;
 }
 
-const mondayAPIToken =
-  "eyJhbGciOiJIUzI1NiJ9.eyJ0aWQiOjQxMzc2NTM3NywiYWFpIjoxMSwidWlkIjoyNzM0NzM2MSwiaWFkIjoiMjAyNC0wOS0yMVQxMzo0NTozMi4xNDJaIiwicGVyIjoibWU6d3JpdGUiLCJhY3RpZCI6MTA5NzUxOTgsInJnbiI6InVzZTEifQ.RJ7w6d2lWhkVmB8U5EQULCEhIB7UVMH08leic-ALccs";
-
 export const StrategistPage = (props: StrategistPageProps) => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const [companyName, setCompanyName] = useState<string>("");
 
-  const [googleSearchResponse, setGoogleSearchResponse] = useState<
-    GoogleSearchResponse | undefined
-  >(undefined);
+  const [googleSearchQueryAndResultItems, setGoogleSearchQueryAndResultItems] =
+    useState<GoogleSearchQueryAndResultItem[]>([]);
 
   const onCompanyNameChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     // Update the state with the new value of the textarea
     setCompanyName(event.currentTarget.value);
   };
 
+  const companyGoogleSearchParams = {
+    params: {
+      companyName: companyName,
+    },
+  };
+
   const onGoogleSearchClick = async () => {
     console.log("onGoogleSearchClick");
     setIsLoading(true);
-    const response = await axios.post<GoogleSearchResponse>(
-      "http://localhost:3000/sandbox/google-search",
+    const response = await axios.post<GoogleSearchQueryAndResultItem[]>(
+      "http://localhost:3000/company/google-search",
       {},
-      {
-        params: {
-          companyName: companyName,
-          gptModelVersion: props.gptModelVersion,
-          language: props.language,
-        },
-      }
+      companyGoogleSearchParams
     );
 
-    setGoogleSearchResponse(response.data);
+    console.log(response.data);
+
+    setGoogleSearchQueryAndResultItems(response.data);
     setIsLoading(false);
   };
 
   return (
     <Grid>
-      <Grid.Col span={4}>
+      <Grid.Col span={2}>
         <Box pos="relative">
           <Title order={6}>Provide company name:</Title>
           <Textarea
@@ -66,6 +77,45 @@ export const StrategistPage = (props: StrategistPageProps) => {
           ></Textarea>
           <Space my="sm" />
           <Button onClick={onGoogleSearchClick}>Search</Button>
+        </Box>
+      </Grid.Col>
+      <Grid.Col span={10}>
+        <Box pos="relative">
+          <Title order={6}>Search results</Title>
+          <Table
+            stickyHeader
+            stickyHeaderOffset={60}
+            //style={{ tableLayout: "fixed", width: "100%" }}
+          >
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th style={{ maxWidth: "200px" }}>Search query</Table.Th>
+                <Table.Th style={{ maxWidth: "200px" }}>URL</Table.Th>
+                <Table.Th style={{ width: "600px" }}>Snippet</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {googleSearchQueryAndResultItems.map((item, index) => (
+                <Table.Tr key={index}>
+                  <Table.Td style={{ maxWidth: "200px" }}>
+                    {item.google_search_query}
+                  </Table.Td>
+                  <Table.Td
+                    style={{
+                      maxWidth: "200px",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {item.google_search_result.link}
+                  </Table.Td>
+                  <Table.Td>{item.google_search_result.snippet}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+            <Table.Caption>Scroll page to see sticky thead</Table.Caption>
+          </Table>
         </Box>
       </Grid.Col>
     </Grid>

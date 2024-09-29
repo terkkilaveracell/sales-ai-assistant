@@ -1,5 +1,4 @@
 import { useState, ChangeEvent } from "react";
-//import { Prism } from "@mantine/prism";
 
 import axios from "axios";
 
@@ -17,7 +16,6 @@ import {
   Table,
   TableData,
   LoadingOverlay,
-  Divider,
 } from "@mantine/core";
 
 interface SandboxPageProps {
