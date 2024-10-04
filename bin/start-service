@@ -2,6 +2,8 @@
 
 set -e
 
-docker compose stop 
+docker compose stop
+
+docker compose rm
 
 docker compose up -d --build

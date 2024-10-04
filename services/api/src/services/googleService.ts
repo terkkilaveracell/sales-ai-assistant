@@ -4,7 +4,7 @@ import axios from "axios";
 const API_KEY = process.env["GOOGLE_API_KEY"];
 const CSE_ID = process.env["GOOGLE_CSE_ID"];
 
-interface GoogleSearchResultItem {
+export interface GoogleSearchResultItem {
   link: string;
   snippet: string;
 }

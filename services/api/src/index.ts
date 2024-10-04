@@ -315,48 +315,6 @@ Veracell
   res.send({ email: response });
 });
 
-/*
-app.post("/company/google-search", async (req, res) => {
-  const companyName = req.query.companyName as string;
-
-  const googleSearchQueries = [
-    `${companyName}`,
-    `${companyName} tekoäly`,
-    `${companyName} teknologia`,
-    `${companyName} data`,
-    `${companyName} tulevaisuus`,
-  ];
-
-  const googleSearchResultsGrouped = await Promise.all(
-    googleSearchQueries.map(async (googleSearchQuery) => {
-      const googleSearchResults = await askGoogle(googleSearchQuery);
-      return {
-        google_search_query: googleSearchQuery,
-        google_search_results: googleSearchResults,
-      };
-    })
-  );
-
-  console.log(JSON.stringify(googleSearchResultsGrouped));
-
-  const googleSearchResultsFlat = googleSearchResultsGrouped.flatMap(
-    ({ google_search_query, google_search_results }) =>
-      google_search_results.map((google_search_result) => ({
-        google_search_query,
-        google_search_result,
-      }))
-  );
-
-  const googleSearchResultsFiltered = googleSearchResultsFlat.filter((el) =>
-    isUrlAllowed(el.google_search_result.link)
-  );
-
-  console.log(JSON.stringify(googleSearchResultsFiltered));
-
-  res.send(googleSearchResultsFiltered);
-});
-*/
-
 app.post("/sandbox/google-search", async (req, res) => {
   const googleSearchString = req.query.googleSearchString as string;
 

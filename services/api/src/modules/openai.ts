@@ -1,8 +1,45 @@
 import { AzureOpenAI } from "openai";
+import { createGenerator } from "ts-json-schema-generator";
+import { JSONSchema7, JSONSchema7Definition } from "json-schema";
+//import { TypeMappings } from "../schemas";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
-const GPT_MODEL_VERSION = "gpt-4o";
+const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o";
+
+/*
+function getTypeName<T>(): typeof TypeMappings {
+  const name = (Object.keys(TypeMappings) as Array<keyof TypeMappings>).find(
+    (key) => TypeMappings[key] === ({} as T).constructor
+  );
+  if (!name) {
+    throw new Error("Type name not found");
+  }
+  return name;
+}
+*/
+
+const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
+  // Configure the generator
+  const config = {
+    path: "./src/schemas.ts", // The path to the current file containing the interface
+    tsconfig: "tsconfig.json", // The path to your tsconfig.json
+    type: typeName, // The name of the interface to convert to JSON schema
+    //interface: interfaceName,
+  };
+
+  const generator = createGenerator(config);
+
+  const schema = generator.createSchema(typeName) as JSONSchema7;
+
+  const schemaDefinition = schema.definitions?.[typeName];
+
+  if (schemaDefinition) {
+    return schemaDefinition;
+  } else {
+    throw new Error(`Could not generate a valid schema for ${typeName}`);
+  }
+};
 
 export class OpenAI {
   private azureOpenAIClient: AzureOpenAI = new AzureOpenAI({
@@ -15,16 +52,52 @@ export class OpenAI {
   ask = async (query: string): Promise<string> => {
     const response = await this.azureOpenAIClient.chat.completions.create({
       messages: [{ role: "user", content: query }],
-      model: GPT_MODEL_VERSION,
+      model: process.env["OPENAI_MODEL_NAME"] || DEFAULT_OPENAI_MODEL_NAME,
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE,
       stream: false,
     });
     return response.choices[0].message.content || "";
   };
+
+  askStructured = async <T>(query: string, typeName: string) => {
+    const schema = generateJSONSchema<T>(typeName) as any;
+
+    const systemPrompt = `"You are a helpful assistant that responds to user queries only according to the following JSON schema:"    
+    ${JSON.stringify(schema)}
+    `;
+
+    console.log(systemPrompt);
+
+    const response = await this.azureOpenAIClient.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+        {
+          role: "user",
+          content: query,
+        },
+      ],
+      model: process.env["OPENAI_MODEL_NAME"] || DEFAULT_OPENAI_MODEL_NAME,
+      max_tokens: MAX_TOKENS,
+      temperature: TEMPERATURE,
+      stream: false,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "StructuredOutput",
+          schema: schema,
+        },
+      },
+    });
+
+    return JSON.parse(response.choices[0].message.content || "") as T;
+  };
 }
 
-export const askGPT = async (
+const askGPT = async (
   openai: AzureOpenAI,
   gptModelVersion: string,
   question: string,
