@@ -9,7 +9,7 @@ const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o";
 
 /*
 function getTypeName<T>(): typeof TypeMappings {
-  const name = (Object.keys(TypeMappings) as Array<keyof TypeMappings>).find(
+  const name = Object.keys(TypeMappings).find(
     (key) => TypeMappings[key] === ({} as T).constructor
   );
   if (!name) {
@@ -25,7 +25,6 @@ const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
     path: "./src/schemas.ts", // The path to the current file containing the interface
     tsconfig: "tsconfig.json", // The path to your tsconfig.json
     type: typeName, // The name of the interface to convert to JSON schema
-    //interface: interfaceName,
   };
 
   const generator = createGenerator(config);
@@ -67,8 +66,6 @@ export class OpenAI {
     ${JSON.stringify(schema)}
     `;
 
-    console.log(systemPrompt);
-
     const response = await this.azureOpenAIClient.chat.completions.create({
       messages: [
         {
@@ -96,24 +93,6 @@ export class OpenAI {
     return JSON.parse(response.choices[0].message.content || "") as T;
   };
 }
-
-const askGPT = async (
-  openai: AzureOpenAI,
-  gptModelVersion: string,
-  question: string,
-  maxTokens: number = MAX_TOKENS,
-  temperature: number = TEMPERATURE
-): Promise<string> => {
-  console.log(`Asking GPT:\n\n${question}`);
-  const response = await openai.chat.completions.create({
-    messages: [{ role: "user", content: question }],
-    model: gptModelVersion,
-    max_tokens: maxTokens,
-    temperature: temperature,
-    stream: false,
-  });
-  return response.choices[0].message.content || "";
-};
 
 export const makeEmbedding = async (
   openai: AzureOpenAI,

@@ -9,7 +9,6 @@ import {
   scrapeAndChunkWebsite,
   scrapeAndChunkWebsiteWithRetries,
   identifyLikeliestCompanyFonectaFinderUrl,
-  identifyLikeliestCompanyUrl,
   Chunk,
 } from "./modules/scraper";
 import { Assistant } from "./modules/assistant";
@@ -93,7 +92,7 @@ app.post("/company/details", async (req, res) => {
 
   console.log(`Using GPT model version: ${gptModelVersion}`);
 
-  const companyUrl = await identifyLikeliestCompanyUrl(companyName);
+  const companyUrl = "foobar"; //await identifyLikeliestCompanyUrl(companyName);
   const companyFinderUrl = await identifyLikeliestCompanyFonectaFinderUrl(
     companyName
   );

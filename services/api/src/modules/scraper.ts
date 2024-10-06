@@ -103,7 +103,7 @@ const endsWithAny = (str: string, substrings: string[]): boolean => {
   return substrings.some((substring) => str.endsWith(substring));
 };
 
-const getBaseUrl = (url: string): string => {
+export const getBaseUrl = (url: string): string => {
   try {
     const parsedUrl = new URL(url);
     return `${parsedUrl.protocol}//${parsedUrl.hostname}`;
@@ -138,12 +138,12 @@ export const scrapeAndChunkWebsiteWithRetries = async (
   return [];
 };
 
-function ensureHttps(url: string): string {
+export const ensureHttps = (url: string): string => {
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
     url = "https://" + url;
   }
   return url;
-}
+};
 
 const getRobot = async (url: string): Promise<Robot> => {
   const robotsUrl = new URL("robots.txt", ensureHttps(url)).href;
@@ -204,28 +204,44 @@ const getSitemapUrls = async (sitemapUrl: string): Promise<string[]> => {
   return sitemapUrls;
 };
 
-export const scrapeAndChunkWebsiteBySitemap = async (
-  baseUrl: string,
-  chunkSize: number,
-  nRetries: number
-): Promise<Chunk[]> => {
+export const getAllowedSitemapUrlsFromBaseUrl = async (
+  baseUrl: string
+): Promise<string[]> => {
   const robot = await getRobot(baseUrl);
 
   console.log("Found the following sitemaps:", robot.getSitemaps());
 
   const sitemapUrls = await getSitemapUrls(robot.getSitemaps()[0]);
 
-  sitemapUrls.forEach((url) => {
-    console.log(
-      ` - ${url} (${
-        robot.isDisallowed(url, "SalesAIAssistant") ? "PROHIBITED" : "OK"
-      })`
-    );
-  });
+  const allowedSitemapUrls = sitemapUrls.filter(
+    (url) => !robot.isDisallowed(url, "SalesAIAssistant")
+  );
+
+  return allowedSitemapUrls;
+};
+
+export const scrapeAndChunkUrls = async (
+  urls: string[],
+  chunkSize: number,
+  nRetries: number
+): Promise<Chunk[]> => {
+  //const robot = await getRobot(baseUrl);
+
+  //console.log("Found the following sitemaps:", robot.getSitemaps());
+
+  //const sitemapUrls = await getSitemapUrls(robot.getSitemaps()[0]);
+
+  //sitemapUrls.forEach((url) => {
+  //  console.log(
+  //    ` - ${url} (${
+  //      robot.isDisallowed(url, "SalesAIAssistant") ? "PROHIBITED" : "OK"
+  //    })`
+  //  );
+  //});
 
   const scrapedContent = (
     await Promise.all(
-      [baseUrl, ...sitemapUrls].map((url) =>
+      urls.map((url) =>
         limiter.schedule(() =>
           scrapeAndChunkWebsiteWithRetries(url, chunkSize, nRetries)
         )
@@ -234,21 +250,6 @@ export const scrapeAndChunkWebsiteBySitemap = async (
   ).reduce((accumulator, value) => accumulator.concat(value), []);
 
   return scrapedContent;
-};
-
-export const identifyLikeliestCompanyUrl = async (
-  companyName: string
-): Promise<string> => {
-  const searchResults = await askGoogle(companyName);
-
-  const companyWebsiteCandidates = searchResults
-    .map((el) => ({ url: el.link, snippet: el.snippet }))
-    .filter((el) => isUrlAllowed(el.url));
-
-  console.log(searchResults.map((hit) => hit.link));
-  console.log(companyWebsiteCandidates);
-
-  return companyWebsiteCandidates[0].url;
 };
 
 export const identifyLikeliestCompanyFonectaFinderUrl = async (

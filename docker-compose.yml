@@ -1,6 +1,28 @@
-version: "3.9"
-
 services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: sales_assistant
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  flyway:
+    image: flyway/flyway
+    depends_on:
+      - db
+    command: -url=jdbc:postgresql://db:5432/sales_assistant -schemas=public -user=postgres -password=postgres migrate
+    volumes:
+      - ./services/db/migrations:/flyway/sql # Your SQL migration files go here
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+
   api:
     build: ./services/api
     volumes:
@@ -8,6 +30,8 @@ services:
       - /usr/src/app/node_modules
     ports:
       - "3000:3000"
+    depends_on:
+      - db
 
   frontend:
     build: ./services/frontend
@@ -19,3 +43,6 @@ services:
       - CHOKIDAR_USEPOLLING=true # This ensures compatibility for hot-reloading on all systems
     ports:
       - "8000:8000"
+
+volumes:
+  postgres_data:

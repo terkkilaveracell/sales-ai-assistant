@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
 import { askGoogle, GoogleSearchResultItem } from "../services/googleService";
 import { OpenAI } from "../modules/openai";
-import { isUrlAllowed } from "../modules/scraper";
+import {
+  isUrlAllowed,
+  getBaseUrl,
+  getAllowedSitemapUrlsFromBaseUrl,
+  scrapeAndChunkUrls,
+} from "../modules/scraper";
 import { CompanyDomainName } from "../schemas";
 
 interface GoogleSearchQueryAndResultItem {
@@ -22,6 +27,42 @@ const makeCompanyGoogleSearchQueries = (companyName: string): string[] => {
   ];
 
   return googleSearchQueries;
+};
+
+const identifyLikeliestCompanyDomainName = async (
+  companyName: string,
+  domainNames: string[]
+): Promise<string> => {
+  console.log(domainNames);
+
+  const domainNameCounts: { [domainName: string]: number } = {};
+
+  domainNames.forEach((hostname) => {
+    if (domainNameCounts[hostname]) {
+      domainNameCounts[hostname]++;
+    } else {
+      domainNameCounts[hostname] = 1;
+    }
+  });
+
+  console.log(domainNameCounts);
+
+  const openai = new OpenAI();
+
+  const query = `
+    I have a list of domain names that is a result of series of google queries. Among the domain names should be the company home page. 
+    The company is ${companyName}. Please identify the likeliest company base domain name from the list of domain names.
+    I have counted the number of times each domain name appears in google search results.
+
+    Domain names along with the number of times encountered in google searches:
+    ${JSON.stringify(domainNameCounts)}
+    `;
+
+  const likeliestCompanyDomainName = (
+    await openai.askStructured<CompanyDomainName>(query, "CompanyDomainName")
+  ).company_domain_name;
+
+  return likeliestCompanyDomainName;
 };
 
 const makeGoogleSearchByCompanyName = async (
@@ -57,14 +98,6 @@ const makeGoogleSearchByCompanyName = async (
   return googleSearchResultsFiltered;
 };
 
-const schema = {
-  type: "object",
-  properties: {
-    order_id: { type: "string" },
-  },
-  required: ["order_id"],
-};
-
 export async function companyGoogleSearch(req: Request, res: Response) {
   try {
     const companyName = req.query.companyName as string;
@@ -79,44 +112,33 @@ export async function companyGoogleSearch(req: Request, res: Response) {
       companyName
     );
 
-    const domainNames = googleSearchResults.map(
-      (result) => new URL(result.google_search_result.link).hostname
+    const domainNames = googleSearchResults.map((result) =>
+      getBaseUrl(result.google_search_result.link)
     );
 
     console.log(domainNames);
 
-    const domainNameCounts: { [domainName: string]: number } = {};
+    const likeliestCompanyDomainName = await identifyLikeliestCompanyDomainName(
+      companyName,
+      domainNames
+    );
 
-    domainNames.forEach((hostname) => {
-      if (domainNameCounts[hostname]) {
-        domainNameCounts[hostname]++;
-      } else {
-        domainNameCounts[hostname] = 1;
-      }
-    });
+    console.log(likeliestCompanyDomainName);
 
-    console.log(domainNameCounts);
+    const allowedSitemapUrls = await getAllowedSitemapUrlsFromBaseUrl(
+      likeliestCompanyDomainName
+    );
 
-    const openai = new OpenAI();
+    const chunkSize = 1000;
+    const nRetries = 3;
 
-    console.log(schema);
+    const chunks = await scrapeAndChunkUrls(
+      [likeliestCompanyDomainName, ...allowedSitemapUrls],
+      chunkSize,
+      nRetries
+    );
 
-    const query = `
-    I have a list of domain names that is a result of series of google queries. Among the domain names should be the company home page. 
-    The company is ${companyName}. Please identify the likeliest company base domain name from the list of domain names.
-    I have counted the number of times each domain name appears in google search results.
-
-    Domain names along with the number of times encountered in google searches:
-    ${JSON.stringify(domainNameCounts)}
-    `;
-
-    console.log(query);
-
-    const likelyCompanyDomainName = (
-      await openai.askStructured<CompanyDomainName>(query, "CompanyDomainName")
-    ).company_domain_name;
-
-    console.log(likelyCompanyDomainName);
+    console.log(JSON.stringify(chunks));
 
     res.json(googleSearchResults);
   } catch (error) {
