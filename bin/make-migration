@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -e
+
+SUFFIX=$(echo "$@" | tr '[:upper:]' '[:lower:]' | awk '{$1=$1;print}' | tr '[:space:]' '_' | sed 's/_\+/_/g' | sed 's/_$//')
+
+FILE_NAME=V$(date +"%Y%m%d%H%M%S")__"${SUFFIX:?}.sql"
+
+MIGRATION_FILE_PATH="services/db/migrations/${FILE_NAME}"
+
+echo Creating migration file: ${MIGRATION_FILE_PATH:?}
+
+# Ask the user for confirmation
+read -p "Do you want to continue? (y/n): " choice
+
+# Convert the input to lowercase and check the response
+case "$choice" in
+    y|Y )
+        touch "services/db/migrations/${FILE_NAME}"
+        # Add your script execution steps here
+        ;;
+    n|N )
+        echo "Aborting the script."
+        exit 1
+        ;;
+    * )
+        echo "Invalid input. Please enter 'y' or 'n'."
+        exit 1
+        ;;
+esac

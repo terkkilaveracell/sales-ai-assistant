@@ -12,9 +12,13 @@ services:
 
   flyway:
     image: flyway/flyway
+    environment:
+      - FLYWAY_URL=jdbc:postgresql://db:5432/sales_assistant
+      - FLYWAY_USER=postgres
+      - FLYWAY_PASSWORD=postgres
     depends_on:
       - db
-    command: -url=jdbc:postgresql://db:5432/sales_assistant -schemas=public -user=postgres -password=postgres migrate
+    command: migrate # -url=jdbc:postgresql://db:5432/sales_assistant -schemas=public -user=postgres -password=postgres migrate
     volumes:
       - ./services/db/migrations:/flyway/sql # Your SQL migration files go here
 

@@ -33,8 +33,9 @@ export function splitText(text: string, chunkSize: number): string[] {
 // Main function to scrape and chunk content
 export async function scrapeAndChunkWebsite(
   url: string,
-  chunkSize: number
+  chunkSize: number | null
 ): Promise<Chunk[]> {
+  console.log(`Attempting to scrape the page: ${url}`);
   try {
     // Fetch the HTML content from the URL
     const { data: html } = await axios.get(url);
@@ -52,7 +53,9 @@ export async function scrapeAndChunkWebsite(
     const normalizedText = rawText.replace(/\s+/g, " ").trim();
 
     // Split the text into chunks suitable for RAG
-    const splittedText = splitText(normalizedText, chunkSize);
+    const splittedText = chunkSize
+      ? splitText(normalizedText, chunkSize)
+      : [normalizedText];
 
     return splittedText.map(
       (chunk, index) =>
@@ -115,7 +118,7 @@ export const getBaseUrl = (url: string): string => {
 
 export const scrapeAndChunkWebsiteWithRetries = async (
   url: string,
-  chunkSize: number = 500,
+  chunkSize: number | null = 500,
   numRetries: number = 3
 ): Promise<Chunk[]> => {
   for (let i = 0; i < numRetries; i++) {
@@ -222,7 +225,7 @@ export const getAllowedSitemapUrlsFromBaseUrl = async (
 
 export const scrapeAndChunkUrls = async (
   urls: string[],
-  chunkSize: number,
+  chunkSize: number | null,
   nRetries: number
 ): Promise<Chunk[]> => {
   //const robot = await getRobot(baseUrl);

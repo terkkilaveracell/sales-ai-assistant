@@ -8,6 +8,7 @@ import {
   scrapeAndChunkUrls,
 } from "../modules/scraper";
 import { CompanyDomainName } from "../schemas";
+import { upsertPageSummary } from "../services/db";
 
 interface GoogleSearchQueryAndResultItem {
   google_search_query: string;
@@ -129,16 +130,35 @@ export async function companyGoogleSearch(req: Request, res: Response) {
       likeliestCompanyDomainName
     );
 
-    const chunkSize = 1000;
-    const nRetries = 3;
+    const chunkSize = null;
+    const numRetries = 3;
 
     const chunks = await scrapeAndChunkUrls(
       [likeliestCompanyDomainName, ...allowedSitemapUrls],
       chunkSize,
-      nRetries
+      numRetries
     );
 
     console.log(JSON.stringify(chunks));
+
+    const openai = new OpenAI();
+
+    //chunks.forEach((chunk) => {
+    const query = `
+    I want you to summarise the contents of the following text that is a full scrape of the textual content of the website.
+    Provide your summary based on only the content what is provided, do not add anything you don't find there.
+    Provide your summary in no more than 100 words, and stick to plaintext. Paragraphs allowed, but use sparingly.
+
+    <scraped_content>
+    ${chunks[0].text}
+    </scraped_content>
+
+    `;
+
+    const pageSummary = await openai.ask(query);
+
+    upsertPageSummary(chunks[0].url, pageSummary);
+    //});
 
     res.json(googleSearchResults);
   } catch (error) {
