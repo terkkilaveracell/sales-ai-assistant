@@ -5,10 +5,10 @@ import {
   getAllowedSitemapUrlsFromBaseUrl,
   scrapeAndChunkUrls,
 } from "../modules/scraper";
-import { CompanyDomainName, CompanyContacts } from "../schemas";
-import * as db from "../services/db";
+import { CompanyDomainName } from "../schemas";
+import { databaseService as db } from "../services/databaseService";
 import { askGoogle, GoogleSearchResultItem } from "../services/googleService";
-import { OpenAI } from "../modules/openai";
+import { openaiService as openai } from "../services/openaiService";
 import { logMethod } from "../utils/logDecorator";
 import { logger } from "../utils/logger";
 
@@ -55,12 +55,11 @@ const identifyLikeliestCompanyDomainName = async (
 
   console.log(domainNameCounts);
 
-  const openai = new OpenAI();
-
   const query = `
       I have a list of domain names that is a result of series of google queries. Among the domain names should be the company home page. 
-      The company is ${companyName}. Please identify the likeliest company base domain name from the list of domain names.
-      I have counted the number of times each domain name appears in google search results.
+      The company is ${companyName}. Please identify the likeliest company domain name from the list of domain names. 
+      I have counted the number of times each domain name appears in google search results. 
+      Choose one from the list as it is written, based on your judgement.
   
       Domain names along with the number of times encountered in google searches:
       ${JSON.stringify(domainNameCounts)}
@@ -161,8 +160,6 @@ companyInformationGatheringQueue.process(async (job) => {
   );
 
   console.log(JSON.stringify(chunks));
-
-  const openai = new OpenAI();
 
   //chunks.forEach((chunk) => {
   const query = `

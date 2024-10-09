@@ -1,7 +1,6 @@
 import { Index } from "faiss-node";
-import { AzureOpenAI } from "openai";
-import { Chunk } from "./scraper";
-import { makeEmbedding } from "./openai";
+import { Chunk } from "../modules/scraper";
+import { openaiService as openai } from "../services/openaiService";
 
 const DIMENSIONALITY = 1536;
 
@@ -11,21 +10,14 @@ export interface RAGResponse {
   chunks: Chunk[];
 }
 
-export class RAGStore {
+class RAGStore {
   private embeddingModel: string = "text-embedding-ada-002";
   private index: Index = new Index(DIMENSIONALITY);
   private chunks: Chunk[] = [];
-  private openai: AzureOpenAI = new AzureOpenAI({
-    apiKey: process.env["OPENAI_API_KEY"],
-    apiVersion: process.env["OPENAI_API_VERSION"],
-    endpoint: process.env["OPENAI_ENDPOINT"],
-    deployment: process.env["GPT4o_DEPLOYMENT_NAME"],
-  });
 
   add_chunk = async (chunk: Chunk): Promise<void> => {
     this.chunks.push(chunk);
-    const embedding = await makeEmbedding(
-      this.openai,
+    const embedding = await openai.makeEmbedding(
       this.embeddingModel,
       chunk.text
     );
@@ -33,11 +25,7 @@ export class RAGStore {
   };
 
   search = async (query: string, numHits: number): Promise<Chunk[]> => {
-    const embedding = await makeEmbedding(
-      this.openai,
-      this.embeddingModel,
-      query
-    );
+    const embedding = await openai.makeEmbedding(this.embeddingModel, query);
 
     const searchResult = await this.index.search(embedding, numHits);
 

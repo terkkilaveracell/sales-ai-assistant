@@ -1,23 +1,10 @@
 import { AzureOpenAI } from "openai";
 import { createGenerator } from "ts-json-schema-generator";
 import { JSONSchema7, JSONSchema7Definition } from "json-schema";
-//import { TypeMappings } from "../schemas";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
 const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o";
-
-/*
-function getTypeName<T>(): typeof TypeMappings {
-  const name = Object.keys(TypeMappings).find(
-    (key) => TypeMappings[key] === ({} as T).constructor
-  );
-  if (!name) {
-    throw new Error("Type name not found");
-  }
-  return name;
-}
-*/
 
 const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
   // Configure the generator
@@ -40,7 +27,7 @@ const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
   }
 };
 
-export class OpenAI {
+class OpenAIService {
   private azureOpenAIClient: AzureOpenAI = new AzureOpenAI({
     apiKey: process.env["OPENAI_API_KEY"],
     apiVersion: process.env["OPENAI_API_VERSION"],
@@ -92,16 +79,17 @@ export class OpenAI {
 
     return JSON.parse(response.choices[0].message.content || "") as T;
   };
+
+  makeEmbedding = async (
+    embeddingModel: string,
+    query: string
+  ): Promise<number[]> => {
+    const embedding = await this.azureOpenAIClient.embeddings
+      .create({ input: query, model: embeddingModel })
+      .then((res) => res.data[0].embedding);
+
+    return embedding;
+  };
 }
 
-export const makeEmbedding = async (
-  openai: AzureOpenAI,
-  embeddingModel: string,
-  query: string
-): Promise<number[]> => {
-  const embedding = await openai.embeddings
-    .create({ input: query, model: embeddingModel })
-    .then((res) => res.data[0].embedding);
-
-  return embedding;
-};
+export const openaiService = new OpenAIService();
