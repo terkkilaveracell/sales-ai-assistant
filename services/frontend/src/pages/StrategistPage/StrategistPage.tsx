@@ -53,15 +53,15 @@ export const StrategistPage = (props: StrategistPageProps) => {
   const onGoogleSearchClick = async () => {
     console.log("onGoogleSearchClick");
     setIsLoading(true);
-    const response = await axios.post<GoogleSearchQueryAndResultItem[]>(
-      "http://localhost:3000/company/google-search",
+    const response = await axios.post<any>(
+      "http://localhost:3000/company/gather-information",
       {},
       companyGoogleSearchParams
     );
 
     console.log(response.data);
 
-    setGoogleSearchQueryAndResultItems(response.data);
+    setGoogleSearchQueryAndResultItems([]);
     setIsLoading(false);
   };
 

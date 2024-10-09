@@ -5,6 +5,7 @@
     "moduleResolution": "Node",
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
     "noEmit": true,
     "rootDir": "./src",
     "outDir": "./dist",
