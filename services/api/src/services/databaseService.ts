@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { v4 as uuidv4 } from "uuid";
+import { logMethod } from "../utils/logDecorator";
 
 // Function to generate a new UUID
 const generateUUID = (): string => {
@@ -16,12 +17,14 @@ const pool = new Pool({
 
 class DatabaseService {
   // Function to execute a query
-  query = (text: string, params?: any[]) => {
+  @logMethod()
+  query(text: string, params?: any[]) {
     return pool.query(text, params);
-  };
+  }
 
   // Function to upsert a page summary
-  upsertPageSummary = async (pageUrl: string, pageSummary: string) => {
+  @logMethod()
+  async upsertPageSummary(pageUrl: string, pageSummary: string) {
     const pageId = generateUUID();
 
     const sql = `
@@ -38,40 +41,42 @@ class DatabaseService {
     } catch (error) {
       console.error("Error upserting page summary:", error);
     }
-  };
+  }
 
   // Function to check if a company exists and insert if it doesn't
-  findOrCreateCompany = async (
+  @logMethod()
+  async upsertCompanyDetails(
     companyName: string,
     companyUrl: string
-  ): Promise<string> => {
+  ): Promise<string> {
     try {
-      // Check if the company already exists
-      const result = await this.query(
-        "SELECT company_id FROM companies WHERE company_name = $1",
-        [companyName]
-      );
-
-      if (result.rows.length > 0) {
-        // Company exists, return the company_id
-        return result.rows[0].company_id;
-      } else {
-        // Company does not exist, insert a new row
-        const newCompanyId = uuidv4(); // Generate a new UUID for the company_id
-        const insertResult = await this.query(
-          "INSERT INTO companies (company_id, company_name) VALUES ($1, $2) RETURNING company_id",
-          [newCompanyId, companyName]
-        );
-        // Return the newly created company_id
-        return insertResult.rows[0].company_id;
-      }
+      const sql = `
+        INSERT INTO 
+          companies (company_id, company_name, company_url)
+        VALUES 
+          ($1, $2, $3)
+        ON CONFLICT 
+          (company_name) 
+        DO UPDATE SET 
+          company_url = EXCLUDED.company_url
+        RETURNING
+          company_id
+        ;
+        `;
+      const newCompanyId = uuidv4(); // Generate a new UUID for the company_id
+      const insertResult = await this.query(sql, [
+        newCompanyId,
+        companyName,
+        companyUrl,
+      ]);
+      return insertResult.rows[0].company_id;
     } catch (error) {
       console.error("Error in findOrCreateCompany:", error);
       throw error; // Handle error appropriately
     } finally {
       //client.release(); // Release the client back to the pool
     }
-  };
+  }
 }
 
 export const databaseService = new DatabaseService();

@@ -4,14 +4,18 @@ import { openaiService as openai } from "../services/openaiService";
 
 const DIMENSIONALITY = 1536;
 
+const DEFAULT_OPENAI_EMBEDDING_MODEL_NAME = "text-embedding-ada-002";
+
 export interface RAGResponse {
   prompt: string;
   answer: string;
   chunks: Chunk[];
 }
 
-class RAGStore {
-  private embeddingModel: string = "text-embedding-ada-002";
+class RAGService {
+  private embeddingModel: string =
+    process.env["OPENAI_EMBEDDING_MODEL_NAME"] ||
+    DEFAULT_OPENAI_EMBEDDING_MODEL_NAME;
   private index: Index = new Index(DIMENSIONALITY);
   private chunks: Chunk[] = [];
 
@@ -33,4 +37,14 @@ class RAGStore {
 
     return hits.map((hit) => this.chunks[hit]);
   };
+
+  ask = async (query: string) => {
+    return {
+      prompt: query,
+      answer: "dummy",
+      chunks: [],
+    } as RAGResponse;
+  };
 }
+
+export const ragService = new RAGService();

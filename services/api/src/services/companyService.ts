@@ -140,7 +140,7 @@ companyInformationGatheringQueue.process(async (job) => {
     job.data.companyName
   );
 
-  const companyId = db.findOrCreateCompany(
+  const companyId = db.upsertCompanyDetails(
     job.data.companyName,
     likeliestCompanyDomainName
   );

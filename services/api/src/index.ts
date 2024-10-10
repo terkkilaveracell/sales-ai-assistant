@@ -11,10 +11,8 @@ import {
   identifyLikeliestCompanyFonectaFinderUrl,
   Chunk,
 } from "./modules/scraper";
-import { Assistant } from "./modules/assistant";
-import { OpenAI } from "./modules/openai";
-
-import { isUrlAllowed } from "./modules/scraper";
+import { openaiService as openai } from "./services/openaiService";
+import { ragService as rag } from "./services/ragService";
 
 import { askGoogle } from "./services/googleService";
 
@@ -32,8 +30,6 @@ const graphQLClient = new GraphQLClient(endpoint, {
   },
 });
 */
-
-const openAI = new OpenAI();
 
 const app = express();
 
@@ -119,7 +115,7 @@ ${hits.map((hit) => `\n- ${hit.link}`)}
 
   console.log(prompt2);
 
-  const foo = await openAI.ask(prompt2);
+  const foo = await openai.ask(prompt2);
 
   console.log(foo);
 
@@ -171,23 +167,19 @@ ${contents.text}
     `Making vector store of the scraped content (${scrapedContent.length} chunks)`
   );
 
-  const assistant = new Assistant(scrapedContent);
-
   const whatIsTheCompanyDoingQuery = `What is the main business of company ${companyName}?`;
 
-  const companySummaryRagResponse = await assistant.ask(
-    whatIsTheCompanyDoingQuery
-  );
+  const companySummaryRagResponse = await rag.ask(whatIsTheCompanyDoingQuery);
 
   console.log(`Company summary: \n\n${companySummaryRagResponse.answer}`);
 
   const whoIsTheCEOQuery = `Who is the CEO of the company ${companyName}?`;
 
-  const whoIsTheCEORagResponse = await assistant.ask(whoIsTheCEOQuery);
+  const whoIsTheCEORagResponse = await rag.ask(whoIsTheCEOQuery);
 
   console.log(`Company CEO: \n\n${whoIsTheCEORagResponse.answer}`);
 
-  const contactDetailsRagResponse = await assistant.ask(
+  const contactDetailsRagResponse = await rag.ask(
     `What are the contact details (email, phone, title) for ${whoIsTheCEORagResponse.answer}?`
   );
 
@@ -307,7 +299,7 @@ Veracell
 
   console.log(prompt);
 
-  const response = await openAI.ask(prompt);
+  const response = await openai.ask(prompt);
 
   console.log("Response email:\n\n", response);
 

@@ -4,7 +4,7 @@ import { JSONSchema7, JSONSchema7Definition } from "json-schema";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
-const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o";
+const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o-2024-08-06";
 
 const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
   // Configure the generator
