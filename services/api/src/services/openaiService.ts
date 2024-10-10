@@ -1,33 +1,14 @@
+import tmp from "openai";
 import { AzureOpenAI } from "openai";
-import { createGenerator } from "ts-json-schema-generator";
-import { JSONSchema7, JSONSchema7Definition } from "json-schema";
+import { AzureOpenAIModel, estimateCost } from "../utils/costEstimator";
+import { databaseService as db } from "./databaseService";
+import { generateJSONSchema } from "../utils/generateJSONSchema";
 
 const MAX_TOKENS = 500;
 const TEMPERATURE = 0.7;
 const DEFAULT_OPENAI_MODEL_NAME = "gpt-4o-2024-08-06";
 
-const generateJSONSchema = <T>(typeName: string): JSONSchema7Definition => {
-  // Configure the generator
-  const config = {
-    path: "./src/schemas.ts", // The path to the current file containing the interface
-    tsconfig: "tsconfig.json", // The path to your tsconfig.json
-    type: typeName, // The name of the interface to convert to JSON schema
-  };
-
-  const generator = createGenerator(config);
-
-  const schema = generator.createSchema(typeName) as JSONSchema7;
-
-  const schemaDefinition = schema.definitions?.[typeName];
-
-  if (schemaDefinition) {
-    return schemaDefinition;
-  } else {
-    throw new Error(`Could not generate a valid schema for ${typeName}`);
-  }
-};
-
-class OpenAIService {
+class AzureOpenAIWithCost {
   private azureOpenAIClient: AzureOpenAI = new AzureOpenAI({
     apiKey: process.env["OPENAI_API_KEY"],
     apiVersion: process.env["OPENAI_API_VERSION"],
@@ -35,10 +16,56 @@ class OpenAIService {
     deployment: process.env["GPT4o_DEPLOYMENT_NAME"],
   });
 
-  ask = async (query: string): Promise<string> => {
-    const response = await this.azureOpenAIClient.chat.completions.create({
+  makeCompletion = async (
+    params: tmp.Chat.ChatCompletionCreateParamsNonStreaming
+  ) => {
+    const response = await this.azureOpenAIClient.chat.completions.create(
+      params
+    );
+
+    const inputPromptsConcatenated = params.messages
+      .map((msg) => msg.content as string)
+      .reduce((acc, content) => acc + content, " ");
+
+    const outputResponse = response.choices[0].message.content || "";
+
+    const cost = estimateCost(
+      params.model as AzureOpenAIModel,
+      inputPromptsConcatenated,
+      outputResponse
+    );
+
+    db.accumulateDailyTotalCost(cost);
+
+    return response;
+  };
+
+  makeEmbedding = async (params: tmp.EmbeddingCreateParams) => {
+    const response = this.azureOpenAIClient.embeddings.create(params);
+
+    const cost = estimateCost(
+      params.model as AzureOpenAIModel,
+      params.input as string,
+      "" // Output is standard vector with fixed dimensionality (the embedding), and costs nothing
+    );
+
+    db.accumulateDailyTotalCost(cost);
+
+    return response;
+  };
+}
+
+class OpenAIService {
+  private azureOpenAIClientWithCost: AzureOpenAIWithCost =
+    new AzureOpenAIWithCost();
+
+  private openaiCompletionModel =
+    process.env["OPENAI_MODEL_NAME"] || DEFAULT_OPENAI_MODEL_NAME;
+
+  makeCompletion = async (query: string): Promise<string> => {
+    const response = await this.azureOpenAIClientWithCost.makeCompletion({
       messages: [{ role: "user", content: query }],
-      model: process.env["OPENAI_MODEL_NAME"] || DEFAULT_OPENAI_MODEL_NAME,
+      model: this.openaiCompletionModel,
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE,
       stream: false,
@@ -46,14 +73,14 @@ class OpenAIService {
     return response.choices[0].message.content || "";
   };
 
-  askStructured = async <T>(query: string, typeName: string) => {
+  makeCompletionStructured = async <T>(query: string, typeName: string) => {
     const schema = generateJSONSchema<T>(typeName) as any;
 
     const systemPrompt = `"You are a helpful assistant that responds to user queries only according to the following JSON schema:"    
     ${JSON.stringify(schema)}
     `;
 
-    const response = await this.azureOpenAIClient.chat.completions.create({
+    const response = await this.azureOpenAIClientWithCost.makeCompletion({
       messages: [
         {
           role: "system",
@@ -64,7 +91,7 @@ class OpenAIService {
           content: query,
         },
       ],
-      model: process.env["OPENAI_MODEL_NAME"] || DEFAULT_OPENAI_MODEL_NAME,
+      model: this.openaiCompletionModel,
       max_tokens: MAX_TOKENS,
       temperature: TEMPERATURE,
       stream: false,
@@ -84,8 +111,8 @@ class OpenAIService {
     embeddingModel: string,
     query: string
   ): Promise<number[]> => {
-    const embedding = await this.azureOpenAIClient.embeddings
-      .create({ input: query, model: embeddingModel })
+    const embedding = await this.azureOpenAIClientWithCost
+      .makeEmbedding({ input: query, model: embeddingModel })
       .then((res) => res.data[0].embedding);
 
     return embedding;

@@ -1,6 +1,8 @@
 import { Pool } from "pg";
 import { v4 as uuidv4 } from "uuid";
 import { logMethod } from "../utils/logDecorator";
+import { AzureOpenAIModel, estimateCost } from "../utils/costEstimator";
+import { handleErrors } from "../utils/errorDecorator";
 
 // Function to generate a new UUID
 const generateUUID = (): string => {
@@ -45,12 +47,12 @@ class DatabaseService {
 
   // Function to check if a company exists and insert if it doesn't
   @logMethod()
+  @handleErrors()
   async upsertCompanyDetails(
     companyName: string,
     companyUrl: string
   ): Promise<string> {
-    try {
-      const sql = `
+    const sql = `
         INSERT INTO 
           companies (company_id, company_name, company_url)
         VALUES 
@@ -61,21 +63,30 @@ class DatabaseService {
           company_url = EXCLUDED.company_url
         RETURNING
           company_id
-        ;
-        `;
-      const newCompanyId = uuidv4(); // Generate a new UUID for the company_id
-      const insertResult = await this.query(sql, [
-        newCompanyId,
-        companyName,
-        companyUrl,
-      ]);
-      return insertResult.rows[0].company_id;
-    } catch (error) {
-      console.error("Error in findOrCreateCompany:", error);
-      throw error; // Handle error appropriately
-    } finally {
-      //client.release(); // Release the client back to the pool
-    }
+        ;`;
+    const newCompanyId = generateUUID();
+    const insertResult = await this.query(sql, [
+      newCompanyId,
+      companyName,
+      companyUrl,
+    ]);
+    return insertResult.rows[0].company_id;
+  }
+
+  @logMethod()
+  @handleErrors()
+  async accumulateDailyTotalCost(cost: number) {
+    const sql = `
+    INSERT INTO
+      openai_api_daily_costs (date, cost)
+    VALUES
+      (CURRENT_DATE, $1)
+    ON CONFLICT
+      (day)
+    DO UPDATE SET
+      cost = your_table.cost + $1
+    ;`;
+    const insertResult = await this.query(sql, [cost]);
   }
 }
 

@@ -1,6 +1,6 @@
 import { encoding_for_model, TiktokenModel } from "tiktoken";
 
-type AzureOpenAIModel = "gpt-4o-2024-08-06" | "text-embedding-ada-002";
+export type AzureOpenAIModel = "gpt-4o-2024-08-06" | "text-embedding-ada-002";
 
 // Define the model pricing per 1,000 tokens (you can adjust these values as per OpenAI pricing)
 const pricing: Record<AzureOpenAIModel, { input: number; output: number }> = {
@@ -11,21 +11,16 @@ const pricing: Record<AzureOpenAIModel, { input: number; output: number }> = {
 // Function to estimate tokens and calculate cost
 export const estimateCost = (
   model: AzureOpenAIModel,
-  prompt: string,
-  completion: string
+  input: string,
+  output: string
 ): number => {
   const encoding = encoding_for_model(model as TiktokenModel); // Get the token encoding for the model
 
-  const promptTokens = encoding.encode(prompt).length;
-  const completionTokens = encoding.encode(completion).length;
+  const inputTokens = encoding.encode(input).length;
+  const inputCost = (inputTokens / 1000) * pricing[model].input;
 
-  const totalTokens = promptTokens + completionTokens;
-
-  const pricePerTokenInput = pricing[model].input;
-  const pricePerTokenOutput = pricing[model].output;
-
-  const inputCost = (promptTokens / 1000) * pricePerTokenInput;
-  const outputCost = (completionTokens / 1000) * pricePerTokenOutput;
+  const outputTokens = encoding.encode(output).length;
+  const outputCost = (outputTokens / 1000) * pricing[model].output;
 
   const totalCost = inputCost + outputCost;
 
