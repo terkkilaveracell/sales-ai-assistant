@@ -1,7 +1,6 @@
 import { Pool } from "pg";
 import { v4 as uuidv4 } from "uuid";
 import { logMethod } from "../utils/logDecorator";
-import { AzureOpenAIModel, estimateCost } from "../utils/costEstimator";
 import { handleErrors } from "../utils/errorDecorator";
 
 // Function to generate a new UUID
@@ -20,12 +19,14 @@ const pool = new Pool({
 class DatabaseService {
   // Function to execute a query
   @logMethod()
+  @handleErrors()
   query(text: string, params?: any[]) {
     return pool.query(text, params);
   }
 
   // Function to upsert a page summary
   @logMethod()
+  @handleErrors()
   async upsertPageSummary(pageUrl: string, pageSummary: string) {
     const pageId = generateUUID();
 
@@ -37,12 +38,6 @@ class DatabaseService {
         page_url = EXCLUDED.page_url,
         page_summary = EXCLUDED.page_summary;
     `;
-
-    try {
-      await this.query(sql, [pageId, pageUrl, pageSummary]);
-    } catch (error) {
-      console.error("Error upserting page summary:", error);
-    }
   }
 
   // Function to check if a company exists and insert if it doesn't
@@ -78,13 +73,14 @@ class DatabaseService {
   async accumulateDailyTotalCost(cost: number) {
     const sql = `
     INSERT INTO
-      openai_api_daily_costs (date, cost)
+      openai_api_daily_costs (day, cost, num_api_calls)
     VALUES
-      (CURRENT_DATE, $1)
+      (CURRENT_DATE, $1, 1)
     ON CONFLICT
       (day)
     DO UPDATE SET
-      cost = your_table.cost + $1
+      cost = openai_api_daily_costs.cost + $1,
+      num_api_calls = openai_api_daily_costs.num_api_calls + 1
     ;`;
     const insertResult = await this.query(sql, [cost]);
   }

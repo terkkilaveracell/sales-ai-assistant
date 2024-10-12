@@ -115,7 +115,7 @@ ${hits.map((hit) => `\n- ${hit.link}`)}
 
   console.log(prompt2);
 
-  const foo = await openai.ask(prompt2);
+  const foo = await openai.makeCompletion(prompt2);
 
   console.log(foo);
 
@@ -299,7 +299,7 @@ Veracell
 
   console.log(prompt);
 
-  const response = await openai.ask(prompt);
+  const response = await openai.makeCompletion(prompt);
 
   console.log("Response email:\n\n", response);
 

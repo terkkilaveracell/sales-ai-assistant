@@ -5,7 +5,7 @@ import {
   getAllowedSitemapUrlsFromBaseUrl,
   scrapeAndChunkUrls,
 } from "../modules/scraper";
-import { CompanyDomainName } from "../schemas";
+import { CompanyContacts, CompanyDomainName } from "../schemas";
 import { databaseService as db } from "../services/databaseService";
 import { askGoogle, GoogleSearchResultItem } from "../services/googleService";
 import { openaiService as openai } from "../services/openaiService";
@@ -66,7 +66,10 @@ const identifyLikeliestCompanyDomainName = async (
       `;
 
   const likeliestCompanyDomainName = (
-    await openai.askStructured<CompanyDomainName>(query, "CompanyDomainName")
+    await openai.makeCompletionStructured<CompanyDomainName>(
+      query,
+      "CompanyDomainName"
+    )
   ).company_domain_name;
 
   logger.info(
@@ -173,9 +176,39 @@ companyInformationGatheringQueue.process(async (job) => {
 
   `;
 
-  const pageSummary = await openai.ask(query);
+  const pageSummary = await openai.makeCompletion(query);
 
   db.upsertPageSummary(chunks[0].url, pageSummary);
+
+  const chunks2 = await scrapeAndChunkUrls(
+    ["https://www.veracell.com/contact"],
+    chunkSize,
+    numRetries
+  );
+
+  const query2 = `
+  I want you to find all employee names and contact details such as phone number, email, and role, into a structured content.
+  All information should be extracted as they are written in the web page.
+
+  <scraped_content>
+  ${chunks2[0].text}
+  </scraped_content>
+  `;
+
+  const companyContacts =
+    await openai.makeCompletionStructured<CompanyContacts>(
+      query2,
+      "CompanyContacts"
+    );
+
+  logger.info(
+    `Found company contacts for ${job.data.companyName}: ${JSON.stringify(
+      companyContacts,
+      null,
+      2
+    )}`
+  );
+
   //});
 });
 

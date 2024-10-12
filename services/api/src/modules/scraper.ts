@@ -3,6 +3,7 @@ import { parseString } from "xml2js";
 import robotsParser, { Robot } from "robots-parser";
 import { askGoogle } from "../services/googleService";
 import Bottleneck from "bottleneck";
+import { logger } from "../utils/logger";
 
 import * as cheerio from "cheerio";
 
@@ -126,10 +127,10 @@ export const scrapeAndChunkWebsiteWithRetries = async (
       return await scrapeAndChunkWebsite(url, chunkSize);
     } catch (error) {
       if (error instanceof DOMException) {
-        console.log(`Attempt ${i + 1} failed with DOMException. Retrying...`);
+        logger.info(`Attempt ${i + 1} failed with DOMException. Retrying...`);
         continue; // Retry if it's a DOMException
       } else {
-        console.log(
+        logger.info(
           "Scraping attempt failed with unhandled exception. Giving up..."
         );
         return [];
@@ -137,7 +138,7 @@ export const scrapeAndChunkWebsiteWithRetries = async (
       throw error; // Rethrow if it's a different kind of error
     }
   }
-  console.log(`All scraping attempts (${numRetries}) failed. Giving up...`);
+  logger.info(`All scraping attempts (${numRetries}) failed. Giving up...`);
   return [];
 };
 
@@ -151,7 +152,7 @@ export const ensureHttps = (url: string): string => {
 const getRobot = async (url: string): Promise<Robot> => {
   const robotsUrl = new URL("robots.txt", ensureHttps(url)).href;
 
-  console.log(`Guessing robot file location: ${robotsUrl}`);
+  logger.info(`Guessing robot file location: ${robotsUrl}`);
 
   const response = await axios.get(robotsUrl, { responseType: "text" });
 
@@ -187,7 +188,7 @@ async function fetchAndParseSitemap(url: string): Promise<string[]> {
       });
     });
   } catch (error) {
-    console.error("Error fetching the sitemap:", error);
+    logger.error("Error fetching the sitemap:", error);
     return [];
   }
 }
@@ -212,7 +213,7 @@ export const getAllowedSitemapUrlsFromBaseUrl = async (
 ): Promise<string[]> => {
   const robot = await getRobot(baseUrl);
 
-  console.log("Found the following sitemaps:", robot.getSitemaps());
+  logger.info("Found the following sitemaps:", robot.getSitemaps());
 
   const sitemapUrls = await getSitemapUrls(robot.getSitemaps()[0]);
 
