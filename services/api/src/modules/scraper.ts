@@ -173,15 +173,18 @@ async function fetchAndParseSitemap(url: string): Promise<string[]> {
         } else {
           if (result.sitemapindex) {
             // It's a sitemap index
+            logger.info(`Sitemap ${url} is an index`);
             const sitemaps = result.sitemapindex.sitemap.map(
-              (s: any) => s.loc as string
+              (s: any) => s.loc[0] as string
             );
             resolve(processSitemapIndex(sitemaps));
           } else {
+            logger.info(`Sitemap ${url} is a regular sitemap`);
             // It's a regular sitemap
-            const urls = result.urlset.url.map(
-              (urlEntry: any) => urlEntry.loc as string
-            );
+            const urls = result.urlset.url.map((urlEntry: any) => {
+              //logger.info(JSON.stringify(urlEntry.loc[0].trim()));
+              return urlEntry.loc[0].trim() as string;
+            });
             resolve(urls);
           }
         }
@@ -202,24 +205,18 @@ async function processSitemapIndex(sitemapUrls: string[]): Promise<string[]> {
   return allUrls;
 }
 
-const getSitemapUrls = async (sitemapUrl: string): Promise<string[]> => {
-  const sitemapUrls = await fetchAndParseSitemap(sitemapUrl);
-
-  return sitemapUrls;
-};
-
 export const getAllowedSitemapUrlsFromBaseUrl = async (
   baseUrl: string
 ): Promise<string[]> => {
   const robot = await getRobot(baseUrl);
 
-  logger.info("Found the following sitemaps:", robot.getSitemaps());
+  const sitemapUrls = await fetchAndParseSitemap(robot.getSitemaps()[0]);
 
-  const sitemapUrls = await getSitemapUrls(robot.getSitemaps()[0]);
-
-  const allowedSitemapUrls = sitemapUrls.filter(
-    (url) => !robot.isDisallowed(url, "SalesAIAssistant")
-  );
+  const allowedSitemapUrls = sitemapUrls.filter((url) => {
+    const isAllowed = !robot.isDisallowed(url, "SalesAIAssistant");
+    logger.info(` - ${url} (${isAllowed ? "OK" : "PROHIBITED"})`);
+    return isAllowed;
+  });
 
   return allowedSitemapUrls;
 };

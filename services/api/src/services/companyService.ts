@@ -152,17 +152,30 @@ companyInformationGatheringQueue.process(async (job) => {
     likeliestCompanyDomainName
   );
 
+  logger.info(`Allowed sitemap URLs: ${allowedSitemapUrls}`);
+
   const chunkSize = null;
   const numRetries = 3;
 
+  const companyWebsiteUrlsToScrape = [
+    likeliestCompanyDomainName,
+    ...allowedSitemapUrls,
+  ];
+
+  logger.info(
+    `Scraping ${
+      companyWebsiteUrlsToScrape.length
+    } company URLs: ${JSON.stringify(companyWebsiteUrlsToScrape)}`
+  );
+
   // Chunks are full web pages
   const chunks = await scrapeAndChunkUrls(
-    [likeliestCompanyDomainName, ...allowedSitemapUrls],
+    companyWebsiteUrlsToScrape,
     chunkSize,
     numRetries
   );
 
-  console.log(JSON.stringify(chunks));
+  //console.log(JSON.stringify(chunks));
 
   //chunks.forEach((chunk) => {
   const query = `
