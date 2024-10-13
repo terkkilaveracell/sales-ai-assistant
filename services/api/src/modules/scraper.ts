@@ -1,9 +1,8 @@
-import axios, { AxiosInstance } from "axios";
-import { parseString } from "xml2js";
-import robotsParser, { Robot } from "robots-parser";
+import axios from "axios";
 import { askGoogle } from "../services/googleService";
 import Bottleneck from "bottleneck";
 import { logger } from "../utils/logger";
+import { Robot } from "../utils/robot";
 
 import * as cheerio from "cheerio";
 
@@ -149,97 +148,11 @@ export const ensureHttps = (url: string): string => {
   return url;
 };
 
-const getRobot = async (url: string): Promise<Robot> => {
-  const robotsUrl = new URL("robots.txt", ensureHttps(url)).href;
-
-  logger.info(`Guessing robot file location: ${robotsUrl}`);
-
-  const response = await axios.get(robotsUrl, { responseType: "text" });
-
-  const robotsTxt = response.data;
-
-  const robot = robotsParser(url, robotsTxt);
-
-  return robot;
-};
-
-async function fetchAndParseSitemap(url: string): Promise<string[]> {
-  try {
-    const response = await axios.get(url);
-    return new Promise((resolve, reject) => {
-      parseString(response.data, (err, result) => {
-        if (err) {
-          reject(err);
-        } else {
-          if (result.sitemapindex) {
-            // It's a sitemap index
-            logger.info(`Sitemap ${url} is an index`);
-            const sitemaps = result.sitemapindex.sitemap.map(
-              (s: any) => s.loc[0] as string
-            );
-            resolve(processSitemapIndex(sitemaps));
-          } else {
-            logger.info(`Sitemap ${url} is a regular sitemap`);
-            // It's a regular sitemap
-            const urls = result.urlset.url.map((urlEntry: any) => {
-              //logger.info(JSON.stringify(urlEntry.loc[0].trim()));
-              return urlEntry.loc[0].trim() as string;
-            });
-            resolve(urls);
-          }
-        }
-      });
-    });
-  } catch (error) {
-    logger.error("Error fetching the sitemap:", error);
-    return [];
-  }
-}
-
-async function processSitemapIndex(sitemapUrls: string[]): Promise<string[]> {
-  const allUrls: string[] = [];
-  for (const sitemapUrl of sitemapUrls) {
-    const urls = await fetchAndParseSitemap(sitemapUrl);
-    allUrls.push(...urls);
-  }
-  return allUrls;
-}
-
-export const getAllowedSitemapUrlsFromBaseUrl = async (
-  baseUrl: string
-): Promise<string[]> => {
-  const robot = await getRobot(baseUrl);
-
-  const sitemapUrls = await fetchAndParseSitemap(robot.getSitemaps()[0]);
-
-  const allowedSitemapUrls = sitemapUrls.filter((url) => {
-    const isAllowed = !robot.isDisallowed(url, "SalesAIAssistant");
-    logger.info(` - ${url} (${isAllowed ? "OK" : "PROHIBITED"})`);
-    return isAllowed;
-  });
-
-  return allowedSitemapUrls;
-};
-
 export const scrapeAndChunkUrls = async (
   urls: string[],
   chunkSize: number | null,
   nRetries: number
 ): Promise<Chunk[]> => {
-  //const robot = await getRobot(baseUrl);
-
-  //console.log("Found the following sitemaps:", robot.getSitemaps());
-
-  //const sitemapUrls = await getSitemapUrls(robot.getSitemaps()[0]);
-
-  //sitemapUrls.forEach((url) => {
-  //  console.log(
-  //    ` - ${url} (${
-  //      robot.isDisallowed(url, "SalesAIAssistant") ? "PROHIBITED" : "OK"
-  //    })`
-  //  );
-  //});
-
   const scrapedContent = (
     await Promise.all(
       urls.map((url) =>

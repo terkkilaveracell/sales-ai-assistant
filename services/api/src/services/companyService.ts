@@ -2,7 +2,6 @@ import Queue from "bull";
 import {
   isUrlAllowed,
   getBaseUrl,
-  getAllowedSitemapUrlsFromBaseUrl,
   scrapeAndChunkUrls,
 } from "../modules/scraper";
 import { CompanyContacts, CompanyDomainName } from "../schemas";
@@ -11,6 +10,7 @@ import { askGoogle, GoogleSearchResultItem } from "../services/googleService";
 import { openaiService as openai } from "../services/openaiService";
 import { logMethod } from "../utils/logDecorator";
 import { logger } from "../utils/logger";
+import { Robot, fetchRobotsTxt } from "../utils/robot";
 
 interface GoogleSearchQueryAndResultItem {
   google_search_query: string;
@@ -148,18 +148,22 @@ companyInformationGatheringQueue.process(async (job) => {
     likeliestCompanyDomainName
   );
 
-  const allowedSitemapUrls = await getAllowedSitemapUrlsFromBaseUrl(
-    likeliestCompanyDomainName
-  );
+  const robotsTxt = await fetchRobotsTxt(likeliestCompanyDomainName);
 
-  logger.info(`Allowed sitemap URLs: ${allowedSitemapUrls}`);
+  const robot = new Robot(robotsTxt);
+
+  logger.info(`Robot: ${JSON.stringify(robot)}`);
+
+  const crawlableSitemapUrls = await robot.getCrawlableUrlsBySitemaps();
+
+  logger.info(`Allowed sitemap URLs: ${crawlableSitemapUrls}`);
 
   const chunkSize = null;
   const numRetries = 3;
 
   const companyWebsiteUrlsToScrape = [
     likeliestCompanyDomainName,
-    ...allowedSitemapUrls,
+    ...crawlableSitemapUrls,
   ];
 
   logger.info(
