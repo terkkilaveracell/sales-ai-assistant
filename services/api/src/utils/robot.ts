@@ -3,21 +3,6 @@ import { logger } from "../utils/logger";
 import { parseString } from "xml2js";
 import { logMethod } from "../utils/logDecorator";
 
-// Fetch and use the custom parser for robots.txt
-export async function fetchRobotsTxt(baseUrl: string): Promise<string> {
-  const robotsUrl = `${baseUrl}/robots.txt`;
-
-  try {
-    const response = await axios.get(robotsUrl);
-    return response.data as string;
-    //return new Robot(response.data);
-  } catch (error) {
-    return "";
-    //console.warn("Failed to fetch robots.txt, allowing all URLs by default.");
-    //return new Robot(""); // If no robots.txt is found, allow everything
-  }
-}
-
 export class Robot {
   private disallowedPaths: string[] = [];
   private allowedPaths: string[] = [];
@@ -28,26 +13,41 @@ export class Robot {
   }
 
   // Static async factory method to handle async logic and return a Robot instance
-  //@logMethod()
-  //public static async create(robotsUrl: string): Promise<Robot> {
-  //  const robotsTxt = await fetchRobotsTxt(robotsUrl);
-  //  return new Robot(robotsTxt);
-  //}
+  @logMethod()
+  public static async create(robotsUrl: string): Promise<Robot> {
+    const robotsTxt = await this.fetchRobotsTxt(robotsUrl);
+    return new Robot(robotsTxt);
+  }
+
+  // Fetch and use the custom parser for robots.txt
+  @logMethod()
+  private static async fetchRobotsTxt(baseUrl: string): Promise<string> {
+    const robotsUrl = `${baseUrl}/robots.txt`;
+
+    try {
+      const response = await axios.get(robotsUrl);
+      return response.data as string;
+    } catch (error) {
+      return "";
+    }
+  }
 
   // Extract the value after the first colon (:) in the string
-  //@logMethod()
+  @logMethod()
   private extractAfterColon(line: string): string {
     const colonIndex = line.indexOf(":");
     if (colonIndex !== -1) {
       const lineAfterColon = line.substring(colonIndex + 1).trim();
-      logger.info(`Line after colon: ${lineAfterColon}`);
       return lineAfterColon;
     }
+    logger.warn(
+      `Could not find colon in line: '${line}' => Returning empty line`
+    );
     return "";
   }
 
   // Parse robots.txt and extract Disallow and Allow rules for the default user-agent (*)
-  //@logMethod()
+  @logMethod()
   private parseRobotsTxt(robotsTxt: string): void {
     const lines = robotsTxt.split("\n");
     let insideUserAgentBlock = false;
@@ -78,10 +78,8 @@ export class Robot {
 
       // Parse Sitemap directives (which are outside of User-agent blocks)
       if (line.toLowerCase().startsWith("sitemap:")) {
-        logger.info(`Line starts with sitemap: ${line}`);
         const sitemapUrl = this.extractAfterColon(line);
         if (sitemapUrl) {
-          logger.info(`Sitemap URL found: ${sitemapUrl}`);
           this.sitemaps.push(sitemapUrl);
         }
       }
@@ -90,7 +88,7 @@ export class Robot {
 
   // Check if a URL is allowed to be crawled
   @logMethod()
-  public isUrlAllowed(url: string): boolean {
+  public isUrlAllowedByRobotRules(url: string): boolean {
     const urlPath = new URL(url).pathname;
 
     // Check if the path is explicitly allowed
@@ -166,7 +164,7 @@ export class Robot {
     const sitemapUrls = await this.fetchAndParseSitemap(this.sitemaps[0]);
 
     const allowedSitemapUrls = sitemapUrls.filter((url) => {
-      const isAllowed = this.isUrlAllowed(url);
+      const isAllowed = this.isUrlAllowedByRobotRules(url);
       logger.info(` - ${url} => (${isAllowed ? "OK" : "PROHIBITED"})`);
       return isAllowed;
     });

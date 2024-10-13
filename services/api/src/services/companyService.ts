@@ -10,7 +10,7 @@ import { askGoogle, GoogleSearchResultItem } from "../services/googleService";
 import { openaiService as openai } from "../services/openaiService";
 import { logMethod } from "../utils/logDecorator";
 import { logger } from "../utils/logger";
-import { Robot, fetchRobotsTxt } from "../utils/robot";
+import { Robot } from "../utils/robot";
 
 interface GoogleSearchQueryAndResultItem {
   google_search_query: string;
@@ -148,9 +148,7 @@ companyInformationGatheringQueue.process(async (job) => {
     likeliestCompanyDomainName
   );
 
-  const robotsTxt = await fetchRobotsTxt(likeliestCompanyDomainName);
-
-  const robot = new Robot(robotsTxt);
+  const robot = await Robot.create(likeliestCompanyDomainName);
 
   logger.info(`Robot: ${JSON.stringify(robot)}`);
 
