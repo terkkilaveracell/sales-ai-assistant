@@ -161,7 +161,11 @@ export class Robot {
 
   @logMethod()
   public async getSitemapUrlsAllowedByRobotRules(): Promise<string[]> {
-    const sitemapUrls = await this.fetchAndParseSitemap(this.sitemaps[0]);
+    const sitemapUrls = (
+      await Promise.all(
+        this.sitemaps.map((sitemap) => this.fetchAndParseSitemap(sitemap))
+      )
+    ).flat();
 
     const allowedSitemapUrls = sitemapUrls.filter((url) => {
       const isAllowed = this.isUrlAllowedByRobotRules(url);
