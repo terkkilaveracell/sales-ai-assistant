@@ -160,7 +160,7 @@ export class Robot {
   }
 
   @logMethod()
-  public async getCrawlableUrlsBySitemaps(): Promise<string[]> {
+  public async getSitemapUrlsAllowedByRobotRules(): Promise<string[]> {
     const sitemapUrls = await this.fetchAndParseSitemap(this.sitemaps[0]);
 
     const allowedSitemapUrls = sitemapUrls.filter((url) => {

@@ -152,17 +152,14 @@ companyInformationGatheringQueue.process(async (job) => {
 
   logger.info(`Robot: ${JSON.stringify(robot)}`);
 
-  const crawlableSitemapUrls = await robot.getCrawlableUrlsBySitemaps();
+  const allowedSitemapUrls = await robot.getSitemapUrlsAllowedByRobotRules();
 
-  logger.info(`Allowed sitemap URLs: ${crawlableSitemapUrls}`);
+  logger.info(`Allowed sitemap URLs: ${allowedSitemapUrls}`);
 
   const chunkSize = null;
   const numRetries = 3;
 
-  const companyWebsiteUrlsToScrape = [
-    likeliestCompanyDomainName,
-    ...crawlableSitemapUrls,
-  ];
+  const companyWebsiteUrlsToScrape = allowedSitemapUrls;
 
   logger.info(
     `Scraping ${
