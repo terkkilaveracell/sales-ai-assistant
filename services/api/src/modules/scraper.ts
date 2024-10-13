@@ -2,7 +2,7 @@ import axios from "axios";
 import { askGoogle } from "../services/googleService";
 import Bottleneck from "bottleneck";
 import { logger } from "../utils/logger";
-import { Robot } from "../utils/robot";
+import { databaseService as db } from "../services/databaseService";
 
 import * as cheerio from "cheerio";
 
@@ -47,6 +47,7 @@ export async function scrapeAndChunkWebsite(
     $("script, style, noscript").remove();
 
     // Extract text content from the body
+    const rawHtml = $("body").html();
     const rawText = $("body").text();
 
     // Normalize whitespace and remove unnecessary line breaks

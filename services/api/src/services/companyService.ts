@@ -143,7 +143,7 @@ companyInformationGatheringQueue.process(async (job) => {
     job.data.companyName
   );
 
-  const companyId = db.upsertCompanyDetails(
+  const companyId = await db.upsertCompanyDetails(
     job.data.companyName,
     likeliestCompanyDomainName
   );
@@ -159,7 +159,11 @@ companyInformationGatheringQueue.process(async (job) => {
   const chunkSize = null;
   const numRetries = 3;
 
-  const companyWebsiteUrlsToScrape = allowedSitemapUrls;
+  // Select pages that have not been scraped yet
+  const companyWebsiteUrlsToScrape = allowedSitemapUrls.filter(async (url) => {
+    const pageId = await db.getPageIdByUrl(url);
+    return pageId === null;
+  });
 
   logger.info(
     `Scraping ${
@@ -174,9 +178,16 @@ companyInformationGatheringQueue.process(async (job) => {
     numRetries
   );
 
+  await Promise.all(
+    chunks.map(async (chunk) => {
+      db.upsertWebpageData(companyId, chunk.url, chunk.text);
+    })
+  );
+
   //console.log(JSON.stringify(chunks));
 
   //chunks.forEach((chunk) => {
+  /*
   const query = `
   I want you to summarise the contents of the following text that is a full scrape of the textual content of the website.
   Provide your summary based on only the content what is provided, do not add anything you don't find there.
@@ -191,6 +202,7 @@ companyInformationGatheringQueue.process(async (job) => {
   const pageSummary = await openai.makeCompletion(query);
 
   db.upsertPageSummary(chunks[0].url, pageSummary);
+  */
 
   const chunks2 = await scrapeAndChunkUrls(
     ["https://www.veracell.com/contact"],
