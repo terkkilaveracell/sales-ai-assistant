@@ -1,14 +1,6 @@
-import { useState, ChangeEvent } from "react";
+import { useState, ChangeEvent, useEffect } from "react";
 
-import {
-  Grid,
-  Box,
-  Button,
-  Textarea,
-  Title,
-  Space,
-  Table,
-} from "@mantine/core";
+import { Grid, Box, Button, Select, Title, Space, Table } from "@mantine/core";
 
 import axios from "axios";
 
@@ -31,28 +23,47 @@ interface StrategistPageProps {
   language: string;
 }
 
+interface CompanyRow {
+  company_id: string;
+  company_name: string;
+  company_details: any | null;
+  company_url: string;
+}
+
 export const StrategistPage = (props: StrategistPageProps) => {
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
 
-  const [companyName, setCompanyName] = useState<string>("");
-
-  const [googleSearchQueryAndResultItems, setGoogleSearchQueryAndResultItems] =
-    useState<GoogleSearchQueryAndResultItem[]>([]);
+  const [selectedCompanyName, setSelectedCompanyName] = useState<string>("");
 
   const onCompanyNameChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
     // Update the state with the new value of the textarea
-    setCompanyName(event.currentTarget.value);
+    setSelectedCompanyName(event.currentTarget.value);
   };
 
   const companyGoogleSearchParams = {
     params: {
-      companyName: companyName,
+      companyName: selectedCompanyName,
     },
   };
 
+  useEffect(() => {
+    if (selectedCompanyName) {
+      alert(`Selected company: ${selectedCompanyName}`);
+    }
+  }, [selectedCompanyName]);
+
+  useEffect(() => {
+    const fetchCompanies = async () => {
+      const response = await axios.get<CompanyRow[]>(
+        "http://localhost:3000/companies"
+      );
+      setCompanies(response.data);
+    };
+    fetchCompanies();
+  }, []);
+
   const onGoogleSearchClick = async () => {
     console.log("onGoogleSearchClick");
-    setIsLoading(true);
     const response = await axios.post<any>(
       "http://localhost:3000/company/gather-information",
       {},
@@ -60,63 +71,30 @@ export const StrategistPage = (props: StrategistPageProps) => {
     );
 
     console.log(response.data);
-
-    setGoogleSearchQueryAndResultItems([]);
-    setIsLoading(false);
   };
 
   return (
     <Grid>
       <Grid.Col span={2}>
         <Box pos="relative">
-          <Title order={6}>Provide company name:</Title>
-          <Textarea
-            autosize
-            value={companyName}
-            onChange={onCompanyNameChange}
-          ></Textarea>
+          <Title order={6}>Select company:</Title>
+          <Select
+            value={selectedCompanyName}
+            onChange={(value) => setSelectedCompanyName(value || "")}
+            data={companies.map((company) => ({
+              value: company.company_name,
+              label: company.company_name,
+            }))}
+            searchable
+            clearable
+            placeholder="Choose a company"
+          />
           <Space my="sm" />
           <Button onClick={onGoogleSearchClick}>Search</Button>
         </Box>
       </Grid.Col>
       <Grid.Col span={10}>
-        <Box pos="relative">
-          <Title order={6}>Search results</Title>
-          <Table
-            stickyHeader
-            //stickyHeaderOffset={60}
-            //style={{ tableLayout: "fixed", width: "100%" }}
-          >
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={{ maxWidth: "200px" }}>Search query</Table.Th>
-                <Table.Th style={{ maxWidth: "200px" }}>URL</Table.Th>
-                <Table.Th style={{ width: "600px" }}>Snippet</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {googleSearchQueryAndResultItems.map((item, index) => (
-                <Table.Tr key={index}>
-                  <Table.Td style={{ maxWidth: "200px" }}>
-                    {item.google_search_query}
-                  </Table.Td>
-                  <Table.Td
-                    style={{
-                      maxWidth: "200px",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {item.google_search_result.link}
-                  </Table.Td>
-                  <Table.Td>{item.google_search_result.snippet}</Table.Td>
-                </Table.Tr>
-              ))}
-            </Table.Tbody>
-            <Table.Caption>Scroll page to see sticky thead</Table.Caption>
-          </Table>
-        </Box>
+        <Box pos="relative"></Box>
       </Grid.Col>
     </Grid>
   );

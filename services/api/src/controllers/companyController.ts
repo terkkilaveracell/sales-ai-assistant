@@ -13,3 +13,13 @@ export async function gatherCompanyInformation(req: Request, res: Response) {
     res.status(500).json({ error: "Internal server error" });
   }
 }
+
+export async function getCompanies(req: Request, res: Response) {
+  try {
+    const companies = await companyService.getCompanies();
+    res.json(companies);
+  } catch (error) {
+    console.error("Error in getCompanies controller:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+}

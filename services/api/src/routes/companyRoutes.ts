@@ -1,8 +1,13 @@
 import { Router } from "express";
-import { gatherCompanyInformation } from "../controllers/companyController";
+import {
+  gatherCompanyInformation,
+  getCompanies,
+} from "../controllers/companyController";
 import { validateQueryParams } from "../middlewares";
 
 const router = Router();
+
+router.get("/companies", getCompanies);
 
 router.post(
   "/company/gather-information",

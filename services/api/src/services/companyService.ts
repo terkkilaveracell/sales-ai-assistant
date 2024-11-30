@@ -17,6 +17,13 @@ interface GoogleSearchQueryAndResultItem {
   google_search_result: GoogleSearchResultItem;
 }
 
+interface CompanyRow {
+  company_id: string;
+  company_name: string;
+  company_details: any | null;
+  company_url: string;
+}
+
 const makeCompanyGoogleSearchQueries = (companyName: string): string[] => {
   // NOTE: We assume the company is Finnish, and therefore all content we search for is in Finnish.
 
@@ -240,6 +247,13 @@ class CompanyService {
   @logMethod()
   gatherCompanyInformationInBackground(companyName: string): void {
     companyInformationGatheringQueue.add({ companyName });
+  }
+
+  @logMethod()
+  async getCompanies(): Promise<CompanyRow[]> {
+    const query = "SELECT * FROM companies";
+    const result = await db.query(query);
+    return result.rows;
   }
 }
 
