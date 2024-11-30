@@ -43,6 +43,11 @@ export async function scrapeAndChunkWebsite(
     // Load HTML into Cheerio for parsing
     const $ = cheerio.load(html);
 
+    // Add spaces around all elements to ensure text separation
+    $("*").each((_, element) => {
+      $(element).before(" ").after(" ");
+    });
+
     // Remove script and style tags for cleaner text
     $("script, style, noscript").remove();
 
